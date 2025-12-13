@@ -26,7 +26,10 @@ export default async function ActionItemPage({ params }: ActionItemPageProps) {
   // Test 1: Service client (bypasses RLS)
   const { data: serviceActionItem, error: serviceError } = await serviceSupabase
     .from('action_items')
-    .select('*')
+    .select(`
+      *,
+      owner:profiles!action_items_owner_user_id_fkey(id, full_name, email, avatar_url)
+    `)
     .eq('id', id)
     .single();
 
@@ -44,7 +47,10 @@ export default async function ActionItemPage({ params }: ActionItemPageProps) {
   // Test 2: Regular client (with RLS)
   const { data: actionItem, error } = await supabase
     .from('action_items')
-    .select('*')
+    .select(`
+      *,
+      owner:profiles!action_items_owner_user_id_fkey(id, full_name, email, avatar_url)
+    `)
     .eq('id', id)
     .single();
 

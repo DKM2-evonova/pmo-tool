@@ -26,7 +26,10 @@ export default async function RiskPage({ params }: RiskPageProps) {
   // Test 1: Service client (bypasses RLS)
   const { data: serviceRisk, error: serviceError } = await serviceSupabase
     .from('risks')
-    .select('*')
+    .select(`
+      *,
+      owner:profiles!risks_owner_user_id_fkey(id, full_name, email, avatar_url)
+    `)
     .eq('id', id)
     .single();
 
@@ -44,7 +47,10 @@ export default async function RiskPage({ params }: RiskPageProps) {
   // Test 2: Regular client (with RLS)
   const { data: risk, error } = await supabase
     .from('risks')
-    .select('*')
+    .select(`
+      *,
+      owner:profiles!risks_owner_user_id_fkey(id, full_name, email, avatar_url)
+    `)
     .eq('id', id)
     .single();
 

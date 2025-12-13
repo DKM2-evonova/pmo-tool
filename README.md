@@ -19,6 +19,8 @@ The PMO Tool is an automation layer that sits on top of an organization's existi
 - **Review Workflow**: Staging area for human validation before publishing
 - **Owner Resolution**: 6-step pipeline for resolving owner identity from transcripts
 - **Duplicate Detection**: Semantic matching using pgvector embeddings (threshold: 0.85)
+- **Decision Log**: Track key decisions with outcomes and decision makers
+- **Risk Register**: Risk/issue management with probability/impact assessment and severity matrix
 - **Kanban Board**: Visual task management for action items
 - **Export**: CSV/DOCX/PDF export for action items, decisions, and risks
 - **RBAC**: Role-based access control with project scoping
@@ -108,10 +110,12 @@ src/
 ├── components/             # React components
 │   ├── action-items/       # Action item components
 │   ├── admin/              # Admin components
+│   ├── decisions/          # Decision components
 │   ├── export/             # Export components
 │   ├── layout/             # Layout components
 │   ├── meetings/           # Meeting components
 │   ├── projects/           # Project components
+│   ├── risks/              # Risk components
 │   └── ui/                 # Reusable UI components
 ├── lib/                    # Utility functions
 │   ├── embeddings/         # Embedding generation
@@ -136,9 +140,9 @@ supabase/
 - `projects` - Project definitions with milestones
 - `project_members` - Project membership (for RLS)
 - `meetings` - Meeting records with transcripts
-- `action_items` - Action items with embeddings
-- `decisions` - Decision log
-- `risks` - Risk/issue register
+- `action_items` - Action items with embeddings and status updates
+- `decisions` - Decision log with outcomes and decision makers
+- `risks` - Risk/issue register with probability/impact assessment and status updates
 - `evidence` - Transcript evidence for traceability
 - `proposed_change_sets` - Staging area for reviews
 - `audit_logs` - Change audit trail
@@ -173,11 +177,11 @@ gcloud builds submit --config=cloudbuild.yaml \
 
 | Category | Outputs |
 |----------|---------|
-| Project | Recap, Action Items, Risks/Issues |
-| Governance | Recap, Decisions (with outcomes), Strategic Risks |
-| Discovery | Detailed Recap, Action Items, Decisions |
-| Alignment | Recap, Tone Analysis |
-| Remediation | Detailed Recap, Fishbone Diagram, RAID |
+| **Project** | Recap, Action Items, Risks/Issues |
+| **Governance** | Recap, Decisions (with outcomes), Strategic Risks |
+| **Discovery** | Detailed Recap, Action Items, Decisions |
+| **Alignment** | Recap, Tone Analysis |
+| **Remediation** | Detailed Recap, Fishbone Diagram, RAID |
 
 ## Roles and Permissions
 
@@ -229,6 +233,19 @@ Key directories:
 - **POST** `/api/meetings/[meetingId]/process` - Process a meeting transcript
 - **POST** `/api/meetings/[meetingId]/publish` - Publish reviewed changes
 
+### Action Items
+
+- **PUT** `/api/action-items/[id]/update` - Update action item status and add comments
+
+### Decisions
+
+- Decision log accessible at `/decisions` with filtering and sorting capabilities
+
+### Risks
+
+- **PUT** `/api/risks/[id]/update` - Update risk status and add comments
+- Risk register accessible at `/risks` with severity matrix dashboard
+
 ### Authentication
 
 - Uses Supabase Auth with OAuth providers (Google/Microsoft)
@@ -276,6 +293,20 @@ The system pre-fetches all open action items, risks, and decisions for the selec
 - Threshold: 0.85 (configurable)
 - Embeddings generated/regenerated on Publish
 - Flagged items appear in Review UI as 'Potential Duplicate'
+
+### Decision Log
+
+- Comprehensive decision tracking across all meeting categories
+- Captures decision makers, outcomes, and implementation status
+- Filtering and sorting by project, decision maker, and status
+- Evidence-based decisions with transcript citations
+
+### Risk Register
+
+- Risk/issue management with probability/impact assessment
+- Severity matrix calculation (High/Med/Low) based on risk scores
+- Status tracking with update history and comments
+- Visual dashboard showing risk distribution by severity
 
 ## Troubleshooting
 

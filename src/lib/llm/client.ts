@@ -113,7 +113,7 @@ export class LLMClient {
           stack: error.stack
         });
       }
-      throw new Error(`Both Gemini and OpenAI failed. Gemini error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Both Gemini and OpenAI failed. OpenAI error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
     throw new Error('No LLM providers configured');
