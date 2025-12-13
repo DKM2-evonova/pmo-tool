@@ -19,32 +19,7 @@ export default async function RiskPage({ params }: RiskPageProps) {
     notFound();
   }
 
-  console.log('=== TESTING RISK ACCESS ===');
-  console.log('User ID:', user.id);
-  console.log('Risk ID:', id);
-
-  // Test 1: Service client (bypasses RLS)
-  const { data: serviceRisk, error: serviceError } = await serviceSupabase
-    .from('risks')
-    .select(`
-      *,
-      owner:profiles!risks_owner_user_id_fkey(id, full_name, email, avatar_url)
-    `)
-    .eq('id', id)
-    .single();
-
-  console.log('Service client (no RLS):', {
-    found: !!serviceRisk,
-    error: serviceError?.message,
-    projectId: serviceRisk?.project_id
-  });
-
-  if (!serviceRisk) {
-    console.error('Risk does not exist in database');
-    notFound();
-  }
-
-  // Test 2: Regular client (with RLS)
+  // Get risk data with RLS
   const { data: risk, error } = await supabase
     .from('risks')
     .select(`
@@ -54,21 +29,8 @@ export default async function RiskPage({ params }: RiskPageProps) {
     .eq('id', id)
     .single();
 
-  console.log('Regular client (with RLS):', {
-    found: !!risk,
-    error: error?.message
-  });
-
-  // TEMPORARY WORKAROUND: Use service client if RLS blocks access
-  const finalRisk = risk || serviceRisk;
-
-  if (!finalRisk) {
-    console.error('No risk data available');
+  if (error || !risk) {
     notFound();
-  }
-
-  if (!risk && serviceRisk) {
-    console.log('RLS BLOCKED ACCESS - Using service client workaround');
   }
 
   // Simplified related data fetching
@@ -78,7 +40,7 @@ export default async function RiskPage({ params }: RiskPageProps) {
   const { data: members } = await serviceSupabase
     .from('project_members')
     .select('user_id')
-    .eq('project_id', finalRisk.project_id);
+    .eq('project_id', risk.project_id);
 
   if (members) {
     for (const m of members) {
@@ -101,7 +63,7 @@ export default async function RiskPage({ params }: RiskPageProps) {
   // Parse updates
   let updatesArray: any[] = [];
   try {
-    updatesArray = finalRisk.updates ? JSON.parse(finalRisk.updates as string) : [];
+    updatesArray = risk.updates ? JSON.parse(risk.updates as string) : [];
     if (!Array.isArray(updatesArray)) updatesArray = [];
   } catch (e) {
     console.warn('Failed to parse updates JSON:', e);
@@ -109,7 +71,7 @@ export default async function RiskPage({ params }: RiskPageProps) {
   }
 
   const riskWithUpdates = {
-    ...finalRisk,
+    ...risk,
     updates: updatesArray
   };
 

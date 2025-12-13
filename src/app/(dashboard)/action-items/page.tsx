@@ -4,9 +4,10 @@ import { Plus, List, LayoutGrid } from 'lucide-react';
 import { ActionItemsTable } from '@/components/action-items/action-items-table';
 import { KanbanBoard } from '@/components/action-items/kanban-board';
 import { ProjectFilter } from '@/components/action-items/project-filter';
+import { OwnerFilter } from '@/components/action-items/owner-filter';
 
 interface ActionItemsPageProps {
-  searchParams: Promise<{ view?: string; project?: string }>;
+  searchParams: Promise<{ view?: string; project?: string; owner?: string }>;
 }
 
 export default async function ActionItemsPage({
@@ -20,6 +21,7 @@ export default async function ActionItemsPage({
   const params = await searchParams;
   const view = params.view || 'list';
   const projectFilter = params.project;
+  const ownerFilter = params.owner;
 
   // Get user's projects
   const { data: memberships } = await supabase
@@ -54,7 +56,23 @@ export default async function ActionItemsPage({
     query = query.eq('project_id', projectFilter);
   }
 
+  if (ownerFilter) {
+    query = query.eq('owner_user_id', ownerFilter);
+  }
+
   const { data: actionItems, error: actionItemsError } = await query;
+
+  // Extract unique owners from action items
+  const ownerMap = new Map<string, { id: string; full_name: string; email: string }>();
+  if (actionItems) {
+    for (const item of actionItems) {
+      const owner = item.owner as unknown as { id: string; full_name: string; email: string } | null;
+      if (owner && owner.id) {
+        ownerMap.set(owner.id, owner);
+      }
+    }
+  }
+  const owners = Array.from(ownerMap.values()).sort((a, b) => a.full_name.localeCompare(b.full_name));
 
   console.log('Action items query result:', {
     actionItems: actionItems?.length || 0,
@@ -83,6 +101,7 @@ export default async function ActionItemsPage({
       <div className="flex items-center justify-between">
         <div className="flex gap-2">
           <ProjectFilter projects={projects} currentProject={projectFilter} />
+          <OwnerFilter owners={owners} currentOwner={ownerFilter} />
         </div>
 
         <div className="flex rounded-lg border border-surface-200 bg-white">

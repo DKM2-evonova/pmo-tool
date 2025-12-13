@@ -19,32 +19,7 @@ export default async function ActionItemPage({ params }: ActionItemPageProps) {
     notFound();
   }
 
-  console.log('=== TESTING ACTION ITEM ACCESS ===');
-  console.log('User ID:', user.id);
-  console.log('Action Item ID:', id);
-
-  // Test 1: Service client (bypasses RLS)
-  const { data: serviceActionItem, error: serviceError } = await serviceSupabase
-    .from('action_items')
-    .select(`
-      *,
-      owner:profiles!action_items_owner_user_id_fkey(id, full_name, email, avatar_url)
-    `)
-    .eq('id', id)
-    .single();
-
-  console.log('Service client (no RLS):', {
-    found: !!serviceActionItem,
-    error: serviceError?.message,
-    projectId: serviceActionItem?.project_id
-  });
-
-  if (!serviceActionItem) {
-    console.error('Action item does not exist in database');
-    notFound();
-  }
-
-  // Test 2: Regular client (with RLS)
+  // Get action item data with RLS
   const { data: actionItem, error } = await supabase
     .from('action_items')
     .select(`
@@ -54,21 +29,8 @@ export default async function ActionItemPage({ params }: ActionItemPageProps) {
     .eq('id', id)
     .single();
 
-  console.log('Regular client (with RLS):', {
-    found: !!actionItem,
-    error: error?.message
-  });
-
-  // TEMPORARY WORKAROUND: Use service client if RLS blocks access
-  const finalActionItem = actionItem || serviceActionItem;
-
-  if (!finalActionItem) {
-    console.error('No action item data available');
+  if (error || !actionItem) {
     notFound();
-  }
-
-  if (!actionItem && serviceActionItem) {
-    console.log('RLS BLOCKED ACCESS - Using service client workaround');
   }
 
   // Simplified related data fetching
@@ -78,7 +40,7 @@ export default async function ActionItemPage({ params }: ActionItemPageProps) {
   const { data: members } = await serviceSupabase
     .from('project_members')
     .select('user_id')
-    .eq('project_id', finalActionItem.project_id);
+    .eq('project_id', actionItem.project_id);
 
   if (members) {
     for (const m of members) {
@@ -101,7 +63,7 @@ export default async function ActionItemPage({ params }: ActionItemPageProps) {
   // Parse updates
   let updatesArray: any[] = [];
   try {
-    updatesArray = finalActionItem.updates ? JSON.parse(finalActionItem.updates as string) : [];
+    updatesArray = actionItem.updates ? JSON.parse(actionItem.updates as string) : [];
     if (!Array.isArray(updatesArray)) updatesArray = [];
   } catch (e) {
     console.warn('Failed to parse updates JSON:', e);
@@ -109,7 +71,7 @@ export default async function ActionItemPage({ params }: ActionItemPageProps) {
   }
 
   const actionItemWithUpdates = {
-    ...finalActionItem,
+    ...actionItem,
     updates: updatesArray
   };
 

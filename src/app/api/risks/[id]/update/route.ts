@@ -73,7 +73,14 @@ export async function POST(
       };
 
       // Update the risk
-      const currentUpdates = Array.isArray(risk.updates) ? risk.updates : [];
+      let currentUpdates: any[] = [];
+      try {
+        const parsedUpdates = risk.updates ? JSON.parse(risk.updates) : [];
+        currentUpdates = Array.isArray(parsedUpdates) ? parsedUpdates : [];
+      } catch (error) {
+        console.error('Failed to parse risk updates:', error);
+        currentUpdates = [];
+      }
       const updatedUpdates = [...currentUpdates, update];
 
       const { error: updateError } = await serviceSupabase
@@ -91,23 +98,6 @@ export async function POST(
 
     // Handle general risk update
     else if (title !== undefined || description !== undefined || probability !== undefined || impact !== undefined || mitigation !== undefined || status !== undefined || owner_user_id !== undefined) {
-      // Get owner info if owner_user_id is provided
-      let owner_name = null;
-      let owner_email = null;
-
-      if (owner_user_id) {
-        const { data: ownerProfile } = await serviceSupabase
-          .from('profiles')
-          .select('full_name, email')
-          .eq('id', owner_user_id)
-          .single();
-
-        if (ownerProfile) {
-          owner_name = ownerProfile.full_name;
-          owner_email = ownerProfile.email;
-        }
-      }
-
       // Prepare update data
       const updateData: any = {};
       if (title !== undefined) updateData.title = title;
@@ -116,9 +106,28 @@ export async function POST(
       if (impact !== undefined) updateData.impact = impact;
       if (mitigation !== undefined) updateData.mitigation = mitigation || null;
       if (status !== undefined) updateData.status = status;
-      if (owner_user_id !== undefined) updateData.owner_user_id = owner_user_id || null;
-      if (owner_name !== undefined) updateData.owner_name = owner_name;
-      if (owner_email !== undefined) updateData.owner_email = owner_email;
+
+      // Handle owner update separately to ensure owner_name and owner_email are only set when owner is being changed
+      if (owner_user_id !== undefined) {
+        updateData.owner_user_id = owner_user_id || null;
+
+        if (owner_user_id) {
+          const { data: ownerProfile } = await serviceSupabase
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', owner_user_id)
+            .single();
+
+          if (ownerProfile) {
+            updateData.owner_name = ownerProfile.full_name;
+            updateData.owner_email = ownerProfile.email;
+          }
+        } else {
+          // Clear owner info when removing owner
+          updateData.owner_name = null;
+          updateData.owner_email = null;
+        }
+      }
 
       const { error: updateError } = await serviceSupabase
         .from('risks')
