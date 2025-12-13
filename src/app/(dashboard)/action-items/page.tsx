@@ -42,7 +42,6 @@ export default async function ActionItemsPage({
     .select(
       `
       *,
-      owner:profiles!action_items_owner_user_id_fkey(id, full_name, email, avatar_url),
       project:projects(id, name),
       source_meeting:meetings(id, title)
     `

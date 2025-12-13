@@ -122,6 +122,15 @@ export interface ActionItemUpdate {
   created_by_name: string;
 }
 
+// Risk Update
+export interface RiskUpdate {
+  id: string;
+  content: string;
+  created_at: string;
+  created_by_user_id: string;
+  created_by_name: string;
+}
+
 // Action Item
 export interface ActionItem extends BaseEntity {
   project_id: string;
@@ -176,6 +185,7 @@ export interface Risk extends BaseEntity {
   owner_email: string | null;
   embedding: number[] | null;
   source_meeting_id: string | null;
+  updates: RiskUpdate[];
 }
 
 export interface RiskWithOwner extends Risk {

@@ -216,10 +216,123 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 - The service client approach was chosen to manually implement access control
 - Alternative approach: Use regular client and rely on RLS policies instead of service client
 
+## Final Resolution
+
+### Root Cause Analysis
+
+The action item detail page failures were caused by **two separate but related issues**:
+
+1. **RLS Policy Conflicts**: Complex Row-Level Security policies were blocking access to action item detail pages
+2. **Missing Database Migrations**: The `updates` column for status updates didn't exist in the remote Supabase database
+
+### Solution Implemented
+
+#### Issue 1: RLS Blocking Access to Detail Pages
+
+**Problem**: The original implementation used the regular Supabase client with RLS, but the policies were either too restrictive or not working as expected.
+
+**Solution**:
+- Switched to using the **service client** (bypasses RLS) for fetching action item data
+- This allows the server to manually verify access while bypassing client-side RLS restrictions
+- Added comprehensive logging to debug access issues
+
+**Code Changes**:
+- Modified `/src/app/(dashboard)/action-items/[id]/page.tsx` to use service client
+- Added detailed debugging logs for troubleshooting
+
+#### Issue 2: Missing Database Schema Updates
+
+**Problem**: Status updates failed with "column action_items.updates does not exist" because the database migration wasn't applied to the remote Supabase instance.
+
+**Solution**:
+- Applied the missing migration manually via Supabase SQL Editor:
+```sql
+ALTER TABLE action_items ADD COLUMN IF NOT EXISTS updates JSONB DEFAULT '[]'::jsonb;
+COMMENT ON COLUMN action_items.updates IS 'Array of status updates with timestamps and comments';
+CREATE INDEX IF NOT EXISTS idx_action_items_updates ON action_items USING gin(updates);
+```
+
+#### Issue 3: Client-Side Updates Blocked by RLS
+
+**Problem**: Direct database updates from the client were blocked by RLS policies and schema cache issues.
+
+**Solution**:
+- Created API routes (`/api/action-items/[id]/update`) that use the service client
+- Moved all action item updates (status updates and general edits) to server-side API routes
+- This bypasses client-side RLS restrictions and schema cache issues
+
+**Code Changes**:
+- Created `/src/app/api/action-items/[id]/update/route.ts`
+- Modified client-side code to use API routes instead of direct database calls
+
+### Files Modified
+
+1. **Server Components**:
+   - `src/app/(dashboard)/action-items/[id]/page.tsx` - Service client approach with debugging
+
+2. **API Routes**:
+   - `src/app/api/action-items/[id]/update/route.ts` - Server-side update handling
+
+3. **Client Components**:
+   - `src/app/(dashboard)/action-items/[id]/action-item-detail.tsx` - API route integration
+
+4. **Documentation**:
+   - `TROUBLESHOOTING_ACTION_ITEMS.md` - Complete troubleshooting guide
+
+### Key Learnings
+
+1. **RLS Complexity**: Row-Level Security can create unexpected access issues, especially with complex foreign key relationships
+2. **Service Client Benefits**: Using the service client for sensitive operations bypasses RLS while maintaining security through server-side validation
+3. **Migration Management**: Remote Supabase databases require manual migration application when not using CLI linking
+4. **API Route Pattern**: For operations that modify data, API routes with service clients provide reliable access control
+
+### Testing Results
+
+✅ **Action item detail pages load successfully**
+✅ **Status updates save and display correctly**
+✅ **General action item edits work**
+✅ **RLS bypassed appropriately for authorized users**
+✅ **Database schema updated with required columns**
+
 ## Status
 
-**Current Status**: 🔴 **UNRESOLVED**
+**Current Status**: ✅ **RESOLVED**
 
 **Last Updated**: Current session
 
-**Next Action**: Verify environment variables and test service client directly
+**Resolution**: Fixed by identifying root causes and implementing comprehensive solution
+
+---
+
+## Quick Reference for Future Issues
+
+### Symptoms
+- Action item cards don't open (404 errors)
+- "Action item not found" errors
+- Status updates fail with schema errors
+
+### Quick Diagnosis
+1. Check browser console for RLS errors
+2. Verify database has `updates` column: `SELECT updates FROM action_items LIMIT 1;`
+3. Test with service client vs regular client
+
+### Emergency Fix
+If action items won't load:
+```typescript
+// Temporary: Use service client in page.tsx
+const serviceSupabase = createServiceClient();
+const { data: actionItem } = await serviceSupabase.from('action_items').select('*').eq('id', id).single();
+```
+
+If updates fail:
+1. Apply migration: `ALTER TABLE action_items ADD COLUMN IF NOT EXISTS updates JSONB DEFAULT '[]'::jsonb;`
+2. Refresh schema: `NOTIFY pgrst, 'reload schema';`
+3. Check API route: `/api/action-items/[id]/update`
+
+### Files to Check
+- `src/app/(dashboard)/action-items/[id]/page.tsx` - Service client implementation
+- `src/app/api/action-items/[id]/update/route.ts` - Update API route
+- `src/app/(dashboard)/action-items/[id]/action-item-detail.tsx` - Client-side API calls
+- `src/app/api/admin/refresh-schema/route.ts` - Schema refresh utility
+- `TROUBLESHOOTING_ACTION_ITEMS.md` - Complete troubleshooting guide
+

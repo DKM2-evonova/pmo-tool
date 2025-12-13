@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button, Badge, Input, Select } from '@/components/ui';
-import { formatDateReadable, isOverdue, getInitials, cn } from '@/lib/utils';
+import { formatDateReadable, getInitials, calculateRiskSeverity } from '@/lib/utils';
 import {
   ArrowLeft,
   Edit3,
@@ -15,28 +15,28 @@ import {
   Calendar,
   AlertCircle,
   MessageSquare,
-  Plus,
-  UserCheck,
-  UserPlus
+  Plus
 } from 'lucide-react';
-import type { ActionItemUpdate } from '@/types/database';
-import type { EntityStatus } from '@/types/enums';
+import type { RiskUpdate } from '@/types/database';
+import type { EntityStatus, RiskSeverity } from '@/types/enums';
 
-interface ActionItemDetailProps {
-  actionItem: {
+interface RiskDetailProps {
+  risk: {
     id: string;
     title: string;
     description: string | null;
+    probability: RiskSeverity;
+    impact: RiskSeverity;
+    mitigation: string | null;
     status: EntityStatus;
     owner_user_id: string | null;
     owner_name: string | null;
     owner_email: string | null;
-    due_date: string | null;
     created_at: string;
     updated_at: string;
     project_id: string;
     source_meeting_id: string | null;
-    updates: ActionItemUpdate[];
+    updates: RiskUpdate[];
     owner?: { id: string; full_name: string | null; email: string; avatar_url: string | null } | null;
     project?: { id: string; name: string } | null;
     source_meeting?: { id: string; title: string } | null;
@@ -45,29 +45,29 @@ interface ActionItemDetailProps {
   currentUserId: string;
 }
 
-export function ActionItemDetail({ actionItem: initialActionItem, projectMembers, currentUserId }: ActionItemDetailProps) {
+export function RiskDetail({ risk: initialRisk, projectMembers, currentUserId }: RiskDetailProps) {
   const router = useRouter();
   const supabase = createClient();
-  const [actionItem, setActionItem] = useState(initialActionItem);
+  const [risk, setRisk] = useState(initialRisk);
   const [editing, setEditing] = useState(false);
   const [newUpdate, setNewUpdate] = useState('');
   const [saving, setSaving] = useState(false);
-  const [assigningOwner, setAssigningOwner] = useState(false);
-  const [selectedOwnerId, setSelectedOwnerId] = useState('');
 
   const [formData, setFormData] = useState({
-    title: actionItem.title,
-    description: actionItem.description || '',
-    status: actionItem.status,
-    owner_user_id: actionItem.owner_user_id || '',
-    due_date: actionItem.due_date || '',
+    title: risk.title,
+    description: risk.description || '',
+    probability: risk.probability,
+    impact: risk.impact,
+    mitigation: risk.mitigation || '',
+    status: risk.status,
+    owner_user_id: risk.owner_user_id || '',
   });
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      console.log('Client: Saving action item:', actionItem.id);
-      const response = await fetch(`/api/action-items/${actionItem.id}/update`, {
+      console.log('Client: Saving risk:', risk.id);
+      const response = await fetch(`/api/risks/${risk.id}/update`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -75,37 +75,41 @@ export function ActionItemDetail({ actionItem: initialActionItem, projectMembers
         body: JSON.stringify({
           title: formData.title,
           description: formData.description,
+          probability: formData.probability,
+          impact: formData.impact,
+          mitigation: formData.mitigation,
           status: formData.status,
           owner_user_id: formData.owner_user_id,
-          due_date: formData.due_date,
         }),
       });
 
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to update action item');
+        throw new Error(result.error || 'Failed to update risk');
       }
 
       // Update local state
       const owner = projectMembers.find(m => m.id === formData.owner_user_id);
-      setActionItem({
-        ...actionItem,
+      setRisk({
+        ...risk,
         title: formData.title,
         description: formData.description || null,
+        probability: formData.probability,
+        impact: formData.impact,
+        mitigation: formData.mitigation || null,
         status: formData.status,
         owner_user_id: formData.owner_user_id || null,
         owner_name: owner?.full_name || null,
         owner_email: owner?.email || null,
-        due_date: formData.due_date || null,
         owner: owner ? { id: owner.id, full_name: owner.full_name, email: owner.email, avatar_url: null } : null,
       });
 
       setEditing(false);
       router.refresh();
     } catch (error: any) {
-      console.error('Failed to update action item:', error);
-      alert('Failed to update action item. Please try again.');
+      console.error('Failed to update risk:', error);
+      alert('Failed to update risk. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -116,8 +120,8 @@ export function ActionItemDetail({ actionItem: initialActionItem, projectMembers
 
     setSaving(true);
     try {
-      console.log('Client: Adding update for action item:', actionItem.id);
-      const response = await fetch(`/api/action-items/${actionItem.id}/update`, {
+      console.log('Client: Adding update for risk:', risk.id);
+      const response = await fetch(`/api/risks/${risk.id}/update`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -134,9 +138,9 @@ export function ActionItemDetail({ actionItem: initialActionItem, projectMembers
       }
 
       // Update local state
-      const currentUpdates = Array.isArray(actionItem.updates) ? actionItem.updates : [];
+      const currentUpdates = Array.isArray(risk.updates) ? risk.updates : [];
       const updatedUpdates = [...currentUpdates, result.update];
-      setActionItem({ ...actionItem, updates: updatedUpdates });
+      setRisk({ ...risk, updates: updatedUpdates });
       setNewUpdate('');
       router.refresh();
     } catch (error: any) {
@@ -147,95 +151,19 @@ export function ActionItemDetail({ actionItem: initialActionItem, projectMembers
     }
   };
 
-  const handleOwnerAssignment = async () => {
-    if (!selectedOwnerId) return;
-
-    setSaving(true);
-    try {
-      console.log('Client: Assigning owner for action item:', actionItem.id);
-      const response = await fetch(`/api/action-items/${actionItem.id}/update`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          owner_user_id: selectedOwnerId,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to assign owner');
-      }
-
-      // Update local state
-      const owner = projectMembers.find(m => m.id === selectedOwnerId);
-      const wasUnassigned = !actionItem.owner_user_id;
-      const oldOwnerName = actionItem.owner?.full_name || actionItem.owner_name || 'Unassigned';
-
-      setActionItem({
-        ...actionItem,
-        owner_user_id: selectedOwnerId,
-        owner_name: owner?.full_name || null,
-        owner_email: owner?.email || null,
-        owner: owner ? { id: owner.id, full_name: owner.full_name, email: owner.email, avatar_url: null } : null,
-      });
-
-      setAssigningOwner(false);
-      setSelectedOwnerId('');
-
-      // Add automatic status update for owner change
-      const ownerName = owner?.full_name || owner?.email || 'Unknown';
-      const changeMessage = wasUnassigned
-        ? `Assigned to ${ownerName}`
-        : `Reassigned from ${oldOwnerName} to ${ownerName}`;
-
-      // Add the status update
-      await handleAddUpdateForOwnerChange(changeMessage);
-
-      router.refresh();
-    } catch (error: any) {
-      console.error('Failed to assign owner:', error);
-      alert(`Failed to assign owner: ${error?.message || 'Unknown error'}`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleAddUpdateForOwnerChange = async (message: string) => {
-    try {
-      const response = await fetch(`/api/action-items/${actionItem.id}/update`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          content: message,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to add owner change update');
-      }
-
-      // Update local state
-      const currentUpdates = Array.isArray(actionItem.updates) ? actionItem.updates : [];
-      const updatedUpdates = [...currentUpdates, result.update];
-      setActionItem({ ...actionItem, updates: updatedUpdates });
-    } catch (error: any) {
-      console.error('Failed to add owner change update:', error);
-      // Don't show alert for this as it's a secondary operation
-    }
-  };
-
   const statusVariant: Record<string, 'default' | 'warning' | 'success'> = {
     Open: 'default',
     'In Progress': 'warning',
     Closed: 'success',
   };
+
+  const severityVariant: Record<string, 'default' | 'warning' | 'danger'> = {
+    Low: 'default',
+    Med: 'warning',
+    High: 'danger',
+  };
+
+  const severity = calculateRiskSeverity(risk.probability, risk.impact);
 
   return (
     <div className="space-y-6">
@@ -253,14 +181,17 @@ export function ActionItemDetail({ actionItem: initialActionItem, projectMembers
           </Button>
           <div>
             <h1 className="text-2xl font-bold text-surface-900">
-              {editing ? 'Edit Action Item' : actionItem.title}
+              {editing ? 'Edit Risk' : risk.title}
             </h1>
             <div className="flex items-center gap-2 mt-1">
-              <Badge variant={statusVariant[actionItem.status]}>
-                {actionItem.status}
+              <Badge variant={statusVariant[risk.status]}>
+                {risk.status}
+              </Badge>
+              <Badge variant={severityVariant[severity]}>
+                {severity} Risk ({risk.probability}/{risk.impact})
               </Badge>
               <span className="text-sm text-surface-500">
-                {actionItem.project?.name}
+                {risk.project?.name}
               </span>
             </div>
           </div>
@@ -291,68 +222,75 @@ export function ActionItemDetail({ actionItem: initialActionItem, projectMembers
         <div className="lg:col-span-2 space-y-6">
           {/* Basic Info */}
           <div className="card">
-            <h2 className="text-lg font-semibold text-surface-900 mb-4">Details</h2>
+            <h2 className="text-lg font-semibold text-surface-900 mb-4">Risk Details</h2>
 
             {!editing ? (
               <div className="space-y-4">
-                {actionItem.description && (
+                {risk.description && (
                   <div>
                     <label className="block text-sm font-medium text-surface-700 mb-1">
                       Description
                     </label>
-                    <p className="text-surface-900">{actionItem.description}</p>
+                    <p className="text-surface-900">{risk.description}</p>
                   </div>
                 )}
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
                     <label className="block text-sm font-medium text-surface-700 mb-1">
-                      Owner
+                      Probability
                     </label>
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-sm font-medium text-primary-700">
-                        {getInitials(
-                          actionItem.owner?.full_name ||
-                            actionItem.owner_name ||
-                            'Unassigned'
-                        )}
-                      </div>
-                      <span className="text-surface-900">
-                        {actionItem.owner?.full_name ||
-                          actionItem.owner_name ||
-                          'Unassigned'}
-                      </span>
-                    </div>
+                    <Badge variant={severityVariant[risk.probability === 'High' ? 'danger' : risk.probability === 'Med' ? 'warning' : 'default']}>
+                      {risk.probability}
+                    </Badge>
                   </div>
 
-                  {actionItem.due_date && (
-                    <div>
-                      <label className="block text-sm font-medium text-surface-700 mb-1">
-                        Due Date
-                      </label>
-                      <div className={cn(
-                        "flex items-center gap-2",
-                        isOverdue(actionItem.due_date) && actionItem.status !== 'Closed'
-                          ? 'text-danger-600'
-                          : 'text-surface-600'
-                      )}>
-                        <Calendar className="h-4 w-4" />
-                        {isOverdue(actionItem.due_date) && actionItem.status !== 'Closed' && (
-                          <AlertCircle className="h-4 w-4" />
-                        )}
-                        {formatDateReadable(actionItem.due_date)}
-                      </div>
-                    </div>
-                  )}
+                  <div>
+                    <label className="block text-sm font-medium text-surface-700 mb-1">
+                      Impact
+                    </label>
+                    <Badge variant={severityVariant[risk.impact === 'High' ? 'danger' : risk.impact === 'Med' ? 'warning' : 'default']}>
+                      {risk.impact}
+                    </Badge>
+                  </div>
                 </div>
 
-                {actionItem.source_meeting && (
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 mb-1">
+                    Owner
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-sm font-medium text-primary-700">
+                      {getInitials(
+                        risk.owner?.full_name ||
+                          risk.owner_name ||
+                          'Unassigned'
+                      )}
+                    </div>
+                    <span className="text-surface-900">
+                      {risk.owner?.full_name ||
+                        risk.owner_name ||
+                        'Unassigned'}
+                    </span>
+                  </div>
+                </div>
+
+                {risk.mitigation && (
+                  <div>
+                    <label className="block text-sm font-medium text-surface-700 mb-1">
+                      Mitigation Plan
+                    </label>
+                    <p className="text-surface-900">{risk.mitigation}</p>
+                  </div>
+                )}
+
+                {risk.source_meeting && (
                   <div>
                     <label className="block text-sm font-medium text-surface-700 mb-1">
                       Source Meeting
                     </label>
                     <p className="text-surface-900">
-                      {actionItem.source_meeting.title}
+                      {risk.source_meeting.title}
                     </p>
                   </div>
                 )}
@@ -375,7 +313,31 @@ export function ActionItemDetail({ actionItem: initialActionItem, projectMembers
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     rows={3}
                     className="input resize-none"
-                    placeholder="Detailed description"
+                    placeholder="Detailed risk description"
+                  />
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Select
+                    label="Probability"
+                    value={formData.probability}
+                    onChange={(e) => setFormData({ ...formData, probability: e.target.value as RiskSeverity })}
+                    options={[
+                      { value: 'Low', label: 'Low' },
+                      { value: 'Med', label: 'Medium' },
+                      { value: 'High', label: 'High' },
+                    ]}
+                  />
+
+                  <Select
+                    label="Impact"
+                    value={formData.impact}
+                    onChange={(e) => setFormData({ ...formData, impact: e.target.value as RiskSeverity })}
+                    options={[
+                      { value: 'Low', label: 'Low' },
+                      { value: 'Med', label: 'Medium' },
+                      { value: 'High', label: 'High' },
+                    ]}
                   />
                 </div>
 
@@ -403,12 +365,18 @@ export function ActionItemDetail({ actionItem: initialActionItem, projectMembers
                   />
                 </div>
 
-                <Input
-                  label="Due Date"
-                  type="date"
-                  value={formData.due_date}
-                  onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
-                />
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 mb-1">
+                    Mitigation Plan
+                  </label>
+                  <textarea
+                    value={formData.mitigation}
+                    onChange={(e) => setFormData({ ...formData, mitigation: e.target.value })}
+                    rows={3}
+                    className="input resize-none"
+                    placeholder="Describe how this risk will be mitigated"
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -442,8 +410,8 @@ export function ActionItemDetail({ actionItem: initialActionItem, projectMembers
 
             {/* Updates list */}
             <div className="space-y-3">
-              {actionItem.updates && actionItem.updates.length > 0 ? (
-                actionItem.updates.map((update) => (
+              {risk.updates && risk.updates.length > 0 ? (
+                risk.updates.map((update) => (
                   <div key={update.id} className="border-l-2 border-primary-200 pl-4 py-2">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -469,134 +437,52 @@ export function ActionItemDetail({ actionItem: initialActionItem, projectMembers
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* Owner Assignment */}
-          <div className="card">
-            <h3 className="font-medium text-surface-900 mb-3 flex items-center gap-2">
-              {actionItem.owner_user_id ? (
-                <>
-                  <UserCheck className="h-4 w-4" />
-                  Owner
-                </>
-              ) : (
-                <>
-                  <UserPlus className="h-4 w-4" />
-                  Assign Owner
-                </>
-              )}
-            </h3>
-
-            {!assigningOwner ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 text-sm font-medium text-primary-700">
-                    {getInitials(
-                      actionItem.owner?.full_name ||
-                        actionItem.owner_name ||
-                        'Unassigned'
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-surface-900">
-                      {actionItem.owner?.full_name ||
-                        actionItem.owner_name ||
-                        'Unassigned'}
-                    </p>
-                    {actionItem.owner_email && (
-                      <p className="text-sm text-surface-500">{actionItem.owner_email}</p>
-                    )}
-                  </div>
-                </div>
-
-                <Button
-                  onClick={() => setAssigningOwner(true)}
-                  variant={actionItem.owner_user_id ? "secondary" : "primary"}
-                  size="sm"
-                  className="w-full"
-                  disabled={saving}
-                >
-                  {actionItem.owner_user_id ? 'Reassign Owner' : 'Assign Owner'}
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <Select
-                  value={selectedOwnerId}
-                  onChange={(e) => setSelectedOwnerId(e.target.value)}
-                  options={[
-                    { value: '', label: 'Unassigned' },
-                    ...projectMembers.map((m) => ({
-                      value: m.id,
-                      label: m.full_name || m.email,
-                    }))
-                  ]}
-                  placeholder="Select owner"
-                />
-
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleOwnerAssignment}
-                    size="sm"
-                    className="flex-1"
-                    disabled={!selectedOwnerId || saving}
-                  >
-                    {saving ? 'Assigning...' : 'Assign'}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setAssigningOwner(false);
-                      setSelectedOwnerId('');
-                    }}
-                    size="sm"
-                    disabled={saving}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Quick Stats */}
           <div className="card">
             <h3 className="font-medium text-surface-900 mb-3">Quick Info</h3>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-surface-500">Status:</span>
-                <Badge variant={statusVariant[actionItem.status]} size="sm">
-                  {actionItem.status}
+                <Badge variant={statusVariant[risk.status]} size="sm">
+                  {risk.status}
+                </Badge>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-surface-500">Severity:</span>
+                <Badge variant={severityVariant[severity]} size="sm">
+                  {severity}
                 </Badge>
               </div>
               <div className="flex justify-between">
                 <span className="text-surface-500">Created:</span>
                 <span className="text-surface-900">
-                  {formatDateReadable(actionItem.created_at)}
+                  {formatDateReadable(risk.created_at)}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-surface-500">Last Updated:</span>
                 <span className="text-surface-900">
-                  {formatDateReadable(actionItem.updated_at)}
+                  {formatDateReadable(risk.updated_at)}
                 </span>
               </div>
-              {actionItem.updates && actionItem.updates.length > 0 && (
+              {risk.updates && risk.updates.length > 0 && (
                 <div className="flex justify-between">
                   <span className="text-surface-500">Updates:</span>
-                  <span className="text-surface-900">{actionItem.updates.length}</span>
+                  <span className="text-surface-900">{risk.updates.length}</span>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Overdue Alert */}
-          {actionItem.due_date && isOverdue(actionItem.due_date) && actionItem.status !== 'Closed' && (
+          {/* High Risk Alert */}
+          {severity === 'High' && risk.status !== 'Closed' && (
             <div className="card border-danger-200 bg-danger-50">
               <div className="flex items-center gap-2 text-danger-700">
                 <AlertCircle className="h-5 w-5" />
-                <span className="font-medium">Overdue</span>
+                <span className="font-medium">High Risk</span>
               </div>
               <p className="text-danger-600 text-sm mt-1">
-                This action item was due on {formatDateReadable(actionItem.due_date)}.
+                This is a high-severity risk that requires immediate attention.
               </p>
             </div>
           )}
@@ -605,4 +491,3 @@ export function ActionItemDetail({ actionItem: initialActionItem, projectMembers
     </div>
   );
 }
-

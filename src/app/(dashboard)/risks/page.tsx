@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { AlertTriangle, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui';
 import { formatDateReadable, getInitials, calculateRiskSeverity } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
 export default async function RisksPage() {
   const supabase = await createClient();
@@ -137,53 +138,63 @@ export default async function RisksPage() {
                   risk.impact as any
                 );
                 return (
-                  <tr key={risk.id} className="hover:bg-surface-50">
+                  <tr key={risk.id} className="hover:bg-surface-50 cursor-pointer">
                     <td className="px-6 py-4">
-                      <p className="font-medium text-surface-900">
-                        {risk.title}
-                      </p>
-                      {risk.description && (
-                        <p className="mt-1 line-clamp-1 text-sm text-surface-500">
-                          {risk.description}
+                      <Link href={`/risks/${risk.id}`} className="block">
+                        <p className="font-medium text-surface-900 hover:text-primary-700">
+                          {risk.title}
                         </p>
-                      )}
+                        {risk.description && (
+                          <p className="mt-1 line-clamp-1 text-sm text-surface-500">
+                            {risk.description}
+                          </p>
+                        )}
+                      </Link>
                     </td>
                     <td className="px-6 py-4 text-sm text-surface-500">
-                      {(risk.project as any)?.name || '-'}
+                      <Link href={`/risks/${risk.id}`} className="block hover:text-primary-700">
+                        {(risk.project as any)?.name || '-'}
+                      </Link>
                     </td>
                     <td className="px-6 py-4">
-                      <Badge variant={severityVariant[severity]}>
-                        {severity} ({risk.probability}/{risk.impact})
-                      </Badge>
+                      <Link href={`/risks/${risk.id}`}>
+                        <Badge variant={severityVariant[severity]}>
+                          {severity} ({risk.probability}/{risk.impact})
+                        </Badge>
+                      </Link>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-100 text-xs font-medium text-primary-700">
-                          {(risk.owner as any)?.avatar_url ? (
-                            <img
-                              src={(risk.owner as any).avatar_url}
-                              alt=""
-                              className="h-7 w-7 rounded-full"
-                            />
-                          ) : (
-                            getInitials(
-                              (risk.owner as any)?.full_name ||
-                                risk.owner_name ||
-                                'U'
-                            )
-                          )}
+                      <Link href={`/risks/${risk.id}`} className="block hover:text-primary-700">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-100 text-xs font-medium text-primary-700">
+                            {(risk.owner as any)?.avatar_url ? (
+                              <img
+                                src={(risk.owner as any).avatar_url}
+                                alt=""
+                                className="h-7 w-7 rounded-full"
+                              />
+                            ) : (
+                              getInitials(
+                                (risk.owner as any)?.full_name ||
+                                  risk.owner_name ||
+                                  'U'
+                              )
+                            )}
+                          </div>
+                          <span className="text-sm text-surface-700">
+                            {(risk.owner as any)?.full_name ||
+                              risk.owner_name ||
+                              'Unassigned'}
+                          </span>
                         </div>
-                        <span className="text-sm text-surface-700">
-                          {(risk.owner as any)?.full_name ||
-                            risk.owner_name ||
-                            'Unassigned'}
-                        </span>
-                      </div>
+                      </Link>
                     </td>
                     <td className="px-6 py-4">
-                      <Badge variant={statusVariant[risk.status]}>
-                        {risk.status}
-                      </Badge>
+                      <Link href={`/risks/${risk.id}`}>
+                        <Badge variant={statusVariant[risk.status]}>
+                          {risk.status}
+                        </Badge>
+                      </Link>
                     </td>
                   </tr>
                 );

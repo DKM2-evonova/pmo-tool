@@ -2,23 +2,86 @@ import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
 import { FileText, Plus } from 'lucide-react';
 import { formatDateReadable, getInitials } from '@/lib/utils';
+import { DecisionsTable } from '@/components/decisions/decisions-table';
+import { DecisionFilters } from '@/components/decisions/decision-filters';
+import { DecisionSort } from '@/components/decisions/decision-sort';
 
-export default async function DecisionsPage() {
+interface DecisionsPageProps {
+  searchParams: Promise<{ project?: string; decisionMaker?: string; status?: string; sort?: string }>;
+}
+
+export default async function DecisionsPage({
+  searchParams,
+}: DecisionsPageProps) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const params = await searchParams;
+  const projectFilter = params.project;
+  const decisionMakerFilter = params.decisionMaker;
+  const statusFilter = params.status;
+  const sortParam = params.sort;
+
+  // Parse sort parameter
+  let sortField: 'created_at' | 'title' | 'decision_maker_name' = 'created_at';
+  let sortDirection: 'asc' | 'desc' = 'desc';
+
+  if (sortParam) {
+    const [field, direction] = sortParam.split(':');
+    if (field === 'date') sortField = 'created_at';
+    else if (field === 'title') sortField = 'title';
+    else if (field === 'decisionMaker') sortField = 'decision_maker_name';
+
+    if (direction === 'asc' || direction === 'desc') {
+      sortDirection = direction;
+    }
+  }
+
   // Get user's projects
   const { data: memberships } = await supabase
     .from('project_members')
-    .select('project_id')
+    .select('project_id, project:projects(id, name)')
     .eq('user_id', user?.id);
 
   const projectIds = memberships?.map((m) => m.project_id) || [];
+  const projects: Array<{ id: string; name: string }> = [];
+  if (memberships) {
+    for (const m of memberships) {
+      const proj = m.project as unknown as { id: string; name: string } | null;
+      if (proj) projects.push(proj);
+    }
+  }
 
-  // Get decisions
-  const { data: decisions } = await supabase
+  // Get all decision makers for the filter
+  const { data: decisionMakersData } = await supabase
+    .from('decisions')
+    .select(`
+      decision_maker_user_id,
+      decision_maker_name,
+      decision_maker:profiles!decisions_decision_maker_user_id_fkey(id, full_name, email)
+    `)
+    .in('project_id', projectIds.length > 0 ? projectIds : ['none']);
+
+  const decisionMakers: Array<{ id: string; name: string }> = [];
+  const decisionMakerSet = new Set<string>();
+
+  if (decisionMakersData) {
+    for (const decision of decisionMakersData) {
+      const maker = decision.decision_maker as any;
+      const userId = decision.decision_maker_user_id;
+      const name = maker?.full_name || decision.decision_maker_name || 'Unknown';
+
+      if (userId && !decisionMakerSet.has(userId)) {
+        decisionMakerSet.add(userId);
+        decisionMakers.push({ id: userId, name });
+      }
+    }
+  }
+
+  // Build decisions query
+  let query = supabase
     .from('decisions')
     .select(
       `
@@ -28,8 +91,35 @@ export default async function DecisionsPage() {
       source_meeting:meetings(id, title, date)
     `
     )
-    .in('project_id', projectIds.length > 0 ? projectIds : ['none'])
-    .order('created_at', { ascending: false });
+    .in('project_id', projectIds.length > 0 ? projectIds : ['none']);
+
+  // Apply filters
+  if (projectFilter) {
+    query = query.eq('project_id', projectFilter);
+  }
+
+  if (decisionMakerFilter) {
+    query = query.eq('decision_maker_user_id', decisionMakerFilter);
+  }
+
+  if (statusFilter) {
+    if (statusFilter === 'implemented') {
+      query = query.not('outcome', 'is', null);
+    } else if (statusFilter === 'pending') {
+      query = query.is('outcome', null);
+    }
+  }
+
+  // Apply sorting
+  query = query.order(sortField, { ascending: sortDirection === 'asc' });
+
+  const { data: decisions } = await query;
+
+  // Prepare current sort for the component
+  const currentSort = sortParam ? {
+    field: sortParam.split(':')[0] as 'date' | 'title' | 'decisionMaker',
+    direction: sortParam.split(':')[1] as 'asc' | 'desc'
+  } : undefined;
 
   return (
     <div className="space-y-6">
@@ -42,100 +132,28 @@ export default async function DecisionsPage() {
         </div>
       </div>
 
+      {/* Filters and Sorting */}
+      <div className="flex flex-col gap-4">
+        <DecisionFilters
+          projects={projects}
+          decisionMakers={decisionMakers}
+        />
+        <DecisionSort currentSort={currentSort} />
+      </div>
+
       {decisions && decisions.length > 0 ? (
-        <div className="space-y-4">
-          {decisions.map((decision) => (
-            <div key={decision.id} className="card">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 text-sm text-surface-500">
-                    <span>
-                      {(decision.project as any)?.name || 'Unknown Project'}
-                    </span>
-                    <span>·</span>
-                    <span>
-                      {(decision.source_meeting as any)?.date
-                        ? formatDateReadable(
-                            (decision.source_meeting as any).date
-                          )
-                        : formatDateReadable(decision.created_at)}
-                    </span>
-                  </div>
-                  <h3 className="mt-1 text-lg font-semibold text-surface-900">
-                    {decision.title}
-                  </h3>
-                </div>
-              </div>
-
-              {decision.rationale && (
-                <div className="mt-4">
-                  <p className="text-sm font-medium text-surface-500">
-                    Rationale
-                  </p>
-                  <p className="mt-1 text-surface-700">{decision.rationale}</p>
-                </div>
-              )}
-
-              {decision.outcome && (
-                <div className="mt-4 rounded-lg bg-success-50 p-3">
-                  <p className="text-sm font-medium text-success-700">
-                    Outcome
-                  </p>
-                  <p className="mt-1 text-success-600">{decision.outcome}</p>
-                </div>
-              )}
-
-              {decision.impact && (
-                <div className="mt-4">
-                  <p className="text-sm font-medium text-surface-500">Impact</p>
-                  <p className="mt-1 text-surface-700">{decision.impact}</p>
-                </div>
-              )}
-
-              <div className="mt-4 flex items-center gap-4 border-t border-surface-100 pt-4 text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-xs font-medium text-primary-700">
-                    {(decision.decision_maker as any)?.avatar_url ? (
-                      <img
-                        src={(decision.decision_maker as any).avatar_url}
-                        alt=""
-                        className="h-6 w-6 rounded-full"
-                      />
-                    ) : (
-                      getInitials(
-                        (decision.decision_maker as any)?.full_name ||
-                          decision.decision_maker_name ||
-                          'U'
-                      )
-                    )}
-                  </div>
-                  <span className="text-surface-600">
-                    Decision by{' '}
-                    {(decision.decision_maker as any)?.full_name ||
-                      decision.decision_maker_name ||
-                      'Unknown'}
-                  </span>
-                </div>
-                {decision.source_meeting && (
-                  <Link
-                    href={`/meetings/${(decision.source_meeting as any).id}`}
-                    className="text-primary-600 hover:text-primary-700"
-                  >
-                    View meeting
-                  </Link>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+        <DecisionsTable decisions={decisions} />
       ) : (
         <div className="card flex flex-col items-center justify-center py-12 text-center">
           <FileText className="mb-4 h-12 w-12 text-surface-300" />
           <h3 className="text-lg font-medium text-surface-900">
-            No decisions yet
+            No decisions found
           </h3>
           <p className="mt-1 text-surface-500">
-            Decisions will appear here after processing meetings
+            {projectFilter || decisionMakerFilter || statusFilter
+              ? 'Try adjusting your filters to see more decisions'
+              : 'Decisions will appear here after processing meetings'
+            }
           </p>
         </div>
       )}
