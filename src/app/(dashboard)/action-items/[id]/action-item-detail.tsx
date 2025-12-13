@@ -99,6 +99,7 @@ export function ActionItemDetail({ actionItem: initialActionItem, projectMembers
         owner_email: owner?.email || null,
         due_date: formData.due_date || null,
         owner: owner ? { id: owner.id, full_name: owner.full_name, email: owner.email, avatar_url: null } : null,
+        updates: actionItem.updates, // Preserve updates array
       });
 
       setEditing(false);

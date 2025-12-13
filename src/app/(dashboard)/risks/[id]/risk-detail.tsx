@@ -103,6 +103,7 @@ export function RiskDetail({ risk: initialRisk, projectMembers, currentUserId }:
         owner_name: owner?.full_name || null,
         owner_email: owner?.email || null,
         owner: owner ? { id: owner.id, full_name: owner.full_name, email: owner.email, avatar_url: null } : null,
+        updates: risk.updates, // Preserve updates array
       });
 
       setEditing(false);

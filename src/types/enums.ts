@@ -86,6 +86,7 @@ export const OwnerResolutionStatus = {
   Ambiguous: 'ambiguous',
   ConferenceRoom: 'conference_room',
   Unknown: 'unknown',
+  Placeholder: 'placeholder',
 } as const;
 export type OwnerResolutionStatus = (typeof OwnerResolutionStatus)[keyof typeof OwnerResolutionStatus];
 

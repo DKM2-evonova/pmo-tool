@@ -14,6 +14,8 @@ export function TranscriptUpload({ value, onChange }: TranscriptUploadProps) {
   const [fileName, setFileName] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [showDebug, setShowDebug] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const supportedTypes = [
@@ -22,6 +24,10 @@ export function TranscriptUpload({ value, onChange }: TranscriptUploadProps) {
     'text/rtf',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/pdf',
+    // Be more flexible - allow other document types
+    'application/msword', // .doc files
+    'application/rtf',
+    'text/rtf',
   ];
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -98,6 +104,11 @@ export function TranscriptUpload({ value, onChange }: TranscriptUploadProps) {
       const result = await response.json();
 
       if (!response.ok) {
+        // If processing failed, offer debug information
+        if (result.error && result.error.includes('Failed to extract text from DOCX file')) {
+          console.log('DOCX processing failed. Debug information available at /api/files/debug');
+          // Could add a debug button here in the future
+        }
         throw new Error(result.error || 'Failed to process file');
       }
 
@@ -158,10 +169,37 @@ export function TranscriptUpload({ value, onChange }: TranscriptUploadProps) {
     return cleanedLines.join('\n');
   };
 
+  const handleDebugFile = async () => {
+    if (!fileInputRef.current?.files?.[0]) return;
+
+    setIsProcessing(true);
+    try {
+      const file = fileInputRef.current.files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/files/debug', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+      setDebugInfo(result);
+      setShowDebug(true);
+    } catch (err) {
+      console.error('Debug failed:', err);
+      setError('Failed to debug file');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleClear = () => {
     onChange('');
     setFileName(null);
     setError(null);
+    setDebugInfo(null);
+    setShowDebug(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -187,7 +225,7 @@ export function TranscriptUpload({ value, onChange }: TranscriptUploadProps) {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".txt,.vtt,.docx,.pdf,.rtf"
+            accept=".txt,.vtt,.docx,.pdf,.rtf,.doc"
             onChange={handleFileSelect}
             className="absolute inset-0 cursor-pointer opacity-0"
           />
@@ -200,14 +238,55 @@ export function TranscriptUpload({ value, onChange }: TranscriptUploadProps) {
             {isProcessing ? 'Processing...' : 'Drop file here or click to upload'}
           </p>
           <p className="mt-1 text-xs text-surface-500">
-            Supports VTT, TXT, DOCX, PDF, and RTF files
+            Supports TXT, VTT, DOCX, PDF, RTF, and DOC files
           </p>
         </div>
       )}
 
       {error && (
-        <div className="rounded-lg bg-danger-50 p-3 text-sm text-danger-600">
-          {error}
+        <div className="rounded-lg bg-danger-50 p-3 text-sm">
+          <div className="text-danger-600 mb-2">{error}</div>
+          {(error.includes('DOCX') || error.includes('Failed to process file')) && (
+            <button
+              onClick={handleDebugFile}
+              disabled={isProcessing}
+              className="text-xs bg-danger-100 hover:bg-danger-200 text-danger-700 px-2 py-1 rounded disabled:opacity-50"
+            >
+              {isProcessing ? 'Debugging...' : 'Debug File'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {showDebug && debugInfo && (
+        <div className="rounded-lg bg-blue-50 p-3 text-sm">
+          <div className="font-medium text-blue-800 mb-2">File Debug Information</div>
+          <div className="space-y-1 text-blue-700">
+            <div><strong>File:</strong> {debugInfo.fileName} ({debugInfo.fileSize} bytes)</div>
+            <div><strong>Type:</strong> {debugInfo.mimeType}</div>
+            <div><strong>Signature:</strong> {debugInfo.signature}</div>
+            <div><strong>Is ZIP-like:</strong> {debugInfo.isZipLike ? 'Yes' : 'No'}</div>
+            <div><strong>Processing Result:</strong> {debugInfo.processingResult?.success ? 'Success' : 'Failed'}</div>
+            {debugInfo.processingResult?.error && (
+              <div><strong>Error:</strong> {debugInfo.processingResult.error}</div>
+            )}
+            {debugInfo.recommendations && debugInfo.recommendations.length > 0 && (
+              <div className="mt-2">
+                <strong>Recommendations:</strong>
+                <ul className="list-disc list-inside mt-1">
+                  {debugInfo.recommendations.map((rec: string, i: number) => (
+                    <li key={i}>{rec}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setShowDebug(false)}
+            className="mt-2 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
+          >
+            Hide Debug
+          </button>
         </div>
       )}
 

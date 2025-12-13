@@ -13,24 +13,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate file type
-    const allowedTypes = [
-      'application/pdf',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'text/rtf',
-      'text/plain'
+    // Be more permissive with file types - let the processing logic decide
+    // We still want to filter out obviously wrong files
+    const blockedTypes = [
+      'application/octet-stream', // Generic binary
+      'application/x-msdownload', // Executables
+      'application/x-executable'
     ];
 
-    const allowedExtensions = ['.pdf', '.docx', '.rtf', '.txt'];
-
-    const hasAllowedType = allowedTypes.includes(file.type);
-    const hasAllowedExtension = allowedExtensions.some(ext =>
-      file.name.toLowerCase().endsWith(ext)
-    );
-
-    if (!hasAllowedType && !hasAllowedExtension) {
+    if (blockedTypes.includes(file.type)) {
       return NextResponse.json(
-        { error: 'Unsupported file type. Please upload a PDF or DOCX file.' },
+        { error: 'This file type is not allowed. Please upload a document file (DOCX, PDF, RTF, or TXT).' },
+        { status: 400 }
+      );
+    }
+
+    // Check for obviously wrong file extensions
+    const blockedExtensions = ['.exe', '.dll', '.bat', '.cmd', '.com', '.scr', '.pif'];
+    const lowerName = file.name.toLowerCase();
+
+    if (blockedExtensions.some(ext => lowerName.endsWith(ext))) {
+      return NextResponse.json(
+        { error: 'This file type is not allowed. Please upload a document file.' },
         { status: 400 }
       );
     }
@@ -54,12 +58,13 @@ export async function POST(request: NextRequest) {
       text: result.text,
       fileName: file.name,
       fileSize: file.size,
+      characters: result.text?.length || 0,
     });
 
   } catch (error) {
     console.error('File processing API error:', error);
     return NextResponse.json(
-      { error: 'Internal server error while processing file' },
+      { error: `Failed to process file: ${error instanceof Error ? error.message : 'Unknown error'}. Please try copying the text directly.` },
       { status: 500 }
     );
   }

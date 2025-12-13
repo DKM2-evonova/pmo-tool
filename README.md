@@ -16,7 +16,7 @@ The PMO Tool is an automation layer that sits on top of an organization's existi
 - **AI Extraction**: Uses Gemini 3 Pro Preview and GPT-4o to extract structured data with evidence citations
 - **Context-Aware Updates**: Favors updating existing items over creating duplicates using semantic matching
 - **5 Meeting Categories**: Project, Governance, Discovery, Alignment, Remediation
-- **Review Workflow**: Staging area for human validation before publishing
+- **Review Workflow**: Staging area for human validation with edit and reject capabilities before publishing
 - **Owner Resolution**: 6-step pipeline for resolving owner identity from transcripts
 - **Duplicate Detection**: Semantic matching using pgvector embeddings (threshold: 0.85)
 - **Decision Log**: Track key decisions with outcomes and decision makers
@@ -116,7 +116,7 @@ src/
 │   ├── meetings/           # Meeting components
 │   ├── projects/           # Project components
 │   ├── risks/              # Risk components
-│   └── ui/                 # Reusable UI components
+│   └── ui/                 # Reusable UI components (Button, Input, Textarea, Modal, etc.)
 ├── lib/                    # Utility functions
 │   ├── embeddings/         # Embedding generation
 │   ├── export/             # Export utilities
@@ -273,6 +273,19 @@ Key directories:
 | View analytics | ✓ | ✗ | ✗ |
 
 ## Key Features Explained
+
+### Review Workflow
+
+The PMO Tool includes a comprehensive review system that allows users to validate and modify AI-extracted data before publishing:
+
+- **Lock Mechanism**: Prevents concurrent reviews of the same meeting
+- **Edit Functionality**: Modify descriptions, titles, and other fields of proposed items
+  - Action Items: Edit title and description
+  - Decisions: Edit title, rationale, and outcome
+  - Risks: Edit title, description, and mitigation strategy
+- **Reject Items**: Remove items that are already resolved or not relevant
+- **Owner Resolution**: Assign or resolve owners for action items and risks
+- **Evidence Review**: All items include transcript citations for validation
 
 ### Context-Aware Processing
 

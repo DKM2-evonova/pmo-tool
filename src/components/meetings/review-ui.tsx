@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { Button, Badge, Modal, ModalFooter, Select } from '@/components/ui';
+import { Button, Badge, Modal, ModalFooter, Select, Input, Textarea } from '@/components/ui';
 import {
   Lock,
   Unlock,
@@ -15,6 +15,7 @@ import {
   User,
   ChevronDown,
   ChevronUp,
+  Trash2,
 } from 'lucide-react';
 import { cn, formatDateReadable } from '@/lib/utils';
 import type {
@@ -66,6 +67,8 @@ export function ReviewUI({
     type: 'action_item' | 'decision' | 'risk';
     id: string;
   } | null>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState<any>({});
 
   // Acquire lock when entering review mode
   const acquireLock = async () => {
@@ -159,6 +162,65 @@ export function ReviewUI({
     }));
   };
 
+  // Accept unknown owner as placeholder
+  const acceptAsPlaceholder = (
+    type: 'action_items' | 'risks',
+    tempId: string
+  ) => {
+    setProposedItems((prev) => ({
+      ...prev,
+      [type]: prev[type].map((item: any) =>
+        item.temp_id === tempId
+          ? {
+              ...item,
+              owner_resolution_status: 'placeholder',
+            }
+          : item
+      ),
+    }));
+  };
+
+  // Start editing an item
+  const startEditing = (type: 'action_items' | 'decisions' | 'risks', tempId: string) => {
+    const item = proposedItems[type].find((item: any) => item.temp_id === tempId);
+    if (!item) return;
+
+    setEditingItem({ type: type.replace('_items', '_item') as any, id: tempId });
+    setEditFormData({ ...item });
+    setEditModalOpen(true);
+  };
+
+  // Save edited item
+  const saveEditedItem = () => {
+    if (!editingItem) return;
+
+    const type = editingItem.type === 'action_item' ? 'action_items' :
+                 editingItem.type === 'decision' ? 'decisions' : 'risks';
+
+    setProposedItems((prev) => ({
+      ...prev,
+      [type]: prev[type].map((item: any) =>
+        item.temp_id === editingItem.id ? { ...item, ...editFormData } : item
+      ),
+    }));
+
+    setEditModalOpen(false);
+    setEditingItem(null);
+    setEditFormData({});
+  };
+
+  // Reject an item (set accepted to false)
+  const rejectItem = (type: 'action_items' | 'decisions' | 'risks', tempId: string) => {
+    if (!confirm('Are you sure you want to reject this item? It will not be included when publishing.')) return;
+
+    setProposedItems((prev) => ({
+      ...prev,
+      [type]: prev[type].map((item: any) =>
+        item.temp_id === tempId ? { ...item, accepted: false } : item
+      ),
+    }));
+  };
+
   // Save changes
   const saveChanges = async () => {
     try {
@@ -174,23 +236,25 @@ export function ReviewUI({
     }
   };
 
-  // Check if can publish (all owners resolved)
+  // Check if can publish (only truly blocking issues)
   const canPublish = () => {
-    const unresolvedActionItems = proposedItems.action_items.filter(
+    // Only block on ambiguous and conference_room owners
+    // Unknown owners can be published as placeholders
+    const blockingActionItems = proposedItems.action_items.filter(
       (ai) =>
         ai.accepted &&
-        ['unknown', 'ambiguous', 'conference_room'].includes(
+        ['ambiguous', 'conference_room'].includes(
           ai.owner_resolution_status
         )
     );
-    const unresolvedRisks = proposedItems.risks.filter(
+    const blockingRisks = proposedItems.risks.filter(
       (r) =>
         r.accepted &&
-        ['unknown', 'ambiguous', 'conference_room'].includes(
+        ['ambiguous', 'conference_room'].includes(
           r.owner_resolution_status
         )
     );
-    return unresolvedActionItems.length === 0 && unresolvedRisks.length === 0;
+    return blockingActionItems.length === 0 && blockingRisks.length === 0;
   };
 
   // Publish changes
@@ -234,12 +298,13 @@ export function ReviewUI({
   };
 
   const resolutionStatusBadge = (status: string) => {
-    const config: Record<string, { variant: 'success' | 'warning' | 'danger'; label: string }> = {
+    const config: Record<string, { variant: 'success' | 'warning' | 'danger' | 'primary'; label: string }> = {
       resolved: { variant: 'success', label: 'Resolved' },
       needs_confirmation: { variant: 'warning', label: 'Needs Confirmation' },
       ambiguous: { variant: 'danger', label: 'Ambiguous' },
       conference_room: { variant: 'danger', label: 'Conference Room' },
       unknown: { variant: 'danger', label: 'Unknown' },
+      placeholder: { variant: 'primary', label: 'Placeholder' },
     };
     const { variant, label } = config[status] || { variant: 'default' as any, label: status };
     return <Badge variant={variant}>{label}</Badge>;
@@ -311,13 +376,13 @@ export function ReviewUI({
         </div>
       </div>
 
-      {/* Warning if unresolved owners */}
+      {/* Warning if blocking owner issues */}
       {!canPublish() && hasLock && (
         <div className="card border-warning-200 bg-warning-50">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-warning-600" />
             <p className="text-warning-700">
-              Some owners need to be resolved before publishing
+              Some owners have ambiguous or invalid assignments that must be resolved before publishing
             </p>
           </div>
         </div>
@@ -382,12 +447,26 @@ export function ReviewUI({
                           </span>
                         )}
                       </div>
-                      {/* Owner resolution dropdown */}
+                      {/* Owner resolution controls */}
                       {hasLock &&
                         ['unknown', 'ambiguous', 'conference_room', 'needs_confirmation'].includes(
                           item.owner_resolution_status
                         ) && (
-                          <div className="mt-3">
+                          <div className="mt-3 space-y-2">
+                            {item.owner_resolution_status === 'unknown' && (
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => acceptAsPlaceholder('action_items', item.temp_id)}
+                                >
+                                  Accept as Placeholder
+                                </Button>
+                                <span className="text-xs text-surface-500 self-center">
+                                  or select existing member:
+                                </span>
+                              </div>
+                            )}
                             <Select
                               value={item.owner.resolved_user_id || ''}
                               onChange={(e) =>
@@ -430,23 +509,40 @@ export function ReviewUI({
                       )}
                     </div>
                     {hasLock && (
-                      <button
-                        onClick={() =>
-                          toggleAccept('action_items', item.temp_id)
-                        }
-                        className={cn(
-                          'rounded-lg p-2',
-                          item.accepted
-                            ? 'text-success-500 hover:bg-success-50'
-                            : 'text-surface-400 hover:bg-surface-100'
-                        )}
-                      >
-                        {item.accepted ? (
-                          <CheckCircle className="h-5 w-5" />
-                        ) : (
-                          <XCircle className="h-5 w-5" />
-                        )}
-                      </button>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => startEditing('action_items', item.temp_id)}
+                          className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"
+                          title="Edit description"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => rejectItem('action_items', item.temp_id)}
+                          className="rounded-lg p-2 text-danger-500 hover:bg-danger-50"
+                          title="Reject item"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() =>
+                            toggleAccept('action_items', item.temp_id)
+                          }
+                          className={cn(
+                            'rounded-lg p-2',
+                            item.accepted
+                              ? 'text-success-500 hover:bg-success-50'
+                              : 'text-surface-400 hover:bg-surface-100'
+                          )}
+                          title={item.accepted ? 'Accepted' : 'Not accepted'}
+                        >
+                          {item.accepted ? (
+                            <CheckCircle className="h-5 w-5" />
+                          ) : (
+                            <XCircle className="h-5 w-5" />
+                          )}
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -511,23 +607,40 @@ export function ReviewUI({
                       </div>
                     </div>
                     {hasLock && (
-                      <button
-                        onClick={() =>
-                          toggleAccept('decisions', item.temp_id)
-                        }
-                        className={cn(
-                          'rounded-lg p-2',
-                          item.accepted
-                            ? 'text-success-500 hover:bg-success-50'
-                            : 'text-surface-400 hover:bg-surface-100'
-                        )}
-                      >
-                        {item.accepted ? (
-                          <CheckCircle className="h-5 w-5" />
-                        ) : (
-                          <XCircle className="h-5 w-5" />
-                        )}
-                      </button>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => startEditing('decisions', item.temp_id)}
+                          className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"
+                          title="Edit decision"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => rejectItem('decisions', item.temp_id)}
+                          className="rounded-lg p-2 text-danger-500 hover:bg-danger-50"
+                          title="Reject item"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() =>
+                            toggleAccept('decisions', item.temp_id)
+                          }
+                          className={cn(
+                            'rounded-lg p-2',
+                            item.accepted
+                              ? 'text-success-500 hover:bg-success-50'
+                              : 'text-surface-400 hover:bg-surface-100'
+                          )}
+                          title={item.accepted ? 'Accepted' : 'Not accepted'}
+                        >
+                          {item.accepted ? (
+                            <CheckCircle className="h-5 w-5" />
+                          ) : (
+                            <XCircle className="h-5 w-5" />
+                          )}
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -602,12 +715,26 @@ export function ReviewUI({
                           {resolutionStatusBadge(item.owner_resolution_status)}
                         </span>
                       </div>
-                      {/* Owner resolution dropdown */}
+                      {/* Owner resolution controls */}
                       {hasLock &&
                         ['unknown', 'ambiguous', 'conference_room', 'needs_confirmation'].includes(
                           item.owner_resolution_status
                         ) && (
-                          <div className="mt-3">
+                          <div className="mt-3 space-y-2">
+                            {item.owner_resolution_status === 'unknown' && (
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => acceptAsPlaceholder('risks', item.temp_id)}
+                                >
+                                  Accept as Placeholder
+                                </Button>
+                                <span className="text-xs text-surface-500 self-center">
+                                  or select existing member:
+                                </span>
+                              </div>
+                            )}
                             <Select
                               value={item.owner.resolved_user_id || ''}
                               onChange={(e) =>
@@ -624,21 +751,38 @@ export function ReviewUI({
                         )}
                     </div>
                     {hasLock && (
-                      <button
-                        onClick={() => toggleAccept('risks', item.temp_id)}
-                        className={cn(
-                          'rounded-lg p-2',
-                          item.accepted
-                            ? 'text-success-500 hover:bg-success-50'
-                            : 'text-surface-400 hover:bg-surface-100'
-                        )}
-                      >
-                        {item.accepted ? (
-                          <CheckCircle className="h-5 w-5" />
-                        ) : (
-                          <XCircle className="h-5 w-5" />
-                        )}
-                      </button>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => startEditing('risks', item.temp_id)}
+                          className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"
+                          title="Edit risk"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => rejectItem('risks', item.temp_id)}
+                          className="rounded-lg p-2 text-danger-500 hover:bg-danger-50"
+                          title="Reject item"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => toggleAccept('risks', item.temp_id)}
+                          className={cn(
+                            'rounded-lg p-2',
+                            item.accepted
+                              ? 'text-success-500 hover:bg-success-50'
+                              : 'text-surface-400 hover:bg-surface-100'
+                          )}
+                          title={item.accepted ? 'Accepted' : 'Not accepted'}
+                        >
+                          {item.accepted ? (
+                            <CheckCircle className="h-5 w-5" />
+                          ) : (
+                            <XCircle className="h-5 w-5" />
+                          )}
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -647,6 +791,135 @@ export function ReviewUI({
           </div>
         )}
       </div>
+
+      {/* Edit Modal */}
+      <Modal
+        isOpen={editModalOpen}
+        onClose={() => {
+          setEditModalOpen(false);
+          setEditingItem(null);
+          setEditFormData({});
+        }}
+        title={`Edit ${editingItem?.type?.replace('_', ' ').toUpperCase()}`}
+      >
+        <div className="space-y-4">
+          {editingItem?.type === 'action_item' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">
+                  Title
+                </label>
+                <Input
+                  value={editFormData.title || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
+                  placeholder="Action item title"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">
+                  Description
+                </label>
+                <Textarea
+                  value={editFormData.description || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                  placeholder="Action item description"
+                  rows={3}
+                />
+              </div>
+            </>
+          )}
+
+          {editingItem?.type === 'decision' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">
+                  Title
+                </label>
+                <Input
+                  value={editFormData.title || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
+                  placeholder="Decision title"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">
+                  Rationale
+                </label>
+                <Textarea
+                  value={editFormData.rationale || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, rationale: e.target.value })}
+                  placeholder="Decision rationale"
+                  rows={3}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">
+                  Outcome
+                </label>
+                <Textarea
+                  value={editFormData.outcome || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, outcome: e.target.value })}
+                  placeholder="Decision outcome"
+                  rows={2}
+                />
+              </div>
+            </>
+          )}
+
+          {editingItem?.type === 'risk' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">
+                  Title
+                </label>
+                <Input
+                  value={editFormData.title || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
+                  placeholder="Risk title"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">
+                  Description
+                </label>
+                <Textarea
+                  value={editFormData.description || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                  placeholder="Risk description"
+                  rows={3}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">
+                  Mitigation
+                </label>
+                <Textarea
+                  value={editFormData.mitigation || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, mitigation: e.target.value })}
+                  placeholder="Risk mitigation"
+                  rows={3}
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        <ModalFooter>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setEditModalOpen(false);
+              setEditingItem(null);
+              setEditFormData({});
+            }}
+          >
+            Cancel
+          </Button>
+          <Button onClick={saveEditedItem}>
+            Save Changes
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

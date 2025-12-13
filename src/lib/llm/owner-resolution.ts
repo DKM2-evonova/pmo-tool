@@ -148,7 +148,7 @@ export function resolveOwner(
     };
   }
 
-  // Step 6: Fallback - Unknown
+  // Step 6: Fallback - Unknown (can be accepted as placeholder later)
   return {
     name: owner.name,
     email: owner.email,
@@ -165,7 +165,7 @@ export function resolveOwner(
 export function isOwnerResolutionBlocking(
   resolutionStatus: OwnerResolutionStatus
 ): boolean {
-  return ['unknown', 'ambiguous', 'conference_room'].includes(resolutionStatus);
+  return ['ambiguous', 'conference_room'].includes(resolutionStatus);
 }
 
 /**
@@ -180,6 +180,7 @@ export function getResolutionStatusLabel(
     ambiguous: 'Ambiguous Owner',
     conference_room: 'Conference Room',
     unknown: 'Unknown',
+    placeholder: 'Placeholder',
   };
   return labels[status];
 }
