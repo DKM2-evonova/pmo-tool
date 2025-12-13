@@ -19,6 +19,7 @@ export function TranscriptUpload({ value, onChange }: TranscriptUploadProps) {
   const supportedTypes = [
     'text/plain',
     'text/vtt',
+    'text/rtf',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/pdf',
   ];
@@ -55,24 +56,24 @@ export function TranscriptUpload({ value, onChange }: TranscriptUploadProps) {
     setError(null);
 
     try {
-      // For now, we'll handle text files directly
-      // DOCX and PDF would require server-side processing
+      // Handle text files directly on client
       if (file.type === 'text/plain' || file.name.endsWith('.vtt')) {
         const text = await file.text();
         // Clean VTT format if needed
         const cleanedText = cleanVTT(text);
         onChange(cleanedText);
         setFileName(file.name);
-      } else if (file.name.endsWith('.docx')) {
-        // For DOCX, we'd need to process server-side
-        // For now, show a message
-        setError(
-          'DOCX files require server-side processing. Please paste the text directly.'
-        );
-      } else if (file.type === 'application/pdf') {
-        setError(
-          'PDF files require server-side processing. Please paste the text directly.'
-        );
+      }
+      // Handle DOCX, PDF, and RTF files via server-side processing
+      else if (
+        file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        file.name.toLowerCase().endsWith('.docx') ||
+        file.type === 'application/pdf' ||
+        file.name.toLowerCase().endsWith('.pdf') ||
+        file.type === 'text/rtf' ||
+        file.name.toLowerCase().endsWith('.rtf')
+      ) {
+        await processFileOnServer(file);
       } else {
         setError('Unsupported file type. Please use TXT, VTT, DOCX, or PDF.');
       }
@@ -81,6 +82,51 @@ export function TranscriptUpload({ value, onChange }: TranscriptUploadProps) {
       setError('Failed to process file. Please try again or paste text.');
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const processFileOnServer = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('/api/files/process', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to process file');
+      }
+
+      // Validate that the extracted text looks like actual text, not binary data
+      const extractedText = result.text || '';
+      if (extractedText) {
+        // Check for signs of binary/XML content that shouldn't be displayed
+        const looksLikeBinary = /PK\s*[\x00-\x1F]/.test(extractedText) ||
+                                extractedText.includes('<?xml') ||
+                                extractedText.includes('<word/') ||
+                                extractedText.includes('[word/') ||
+                                /[\x00-\x08\x0E-\x1F]/.test(extractedText); // Control characters
+
+        if (looksLikeBinary) {
+          throw new Error('The file was processed but contains binary data instead of readable text. Please try re-exporting the transcript from Google Meet or copy the text directly.');
+        }
+
+        // Check if it has minimal readable content
+        const hasReadableContent = /[a-zA-Z]{3,}/.test(extractedText);
+        if (!hasReadableContent) {
+          throw new Error('No readable text content was found in the file. Please ensure the file contains transcript text.');
+        }
+      }
+
+      onChange(extractedText);
+      setFileName(result.fileName);
+    } catch (err) {
+      console.error('Server processing error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to process file on server');
     }
   };
 
@@ -141,7 +187,7 @@ export function TranscriptUpload({ value, onChange }: TranscriptUploadProps) {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".txt,.vtt,.docx,.pdf"
+            accept=".txt,.vtt,.docx,.pdf,.rtf"
             onChange={handleFileSelect}
             className="absolute inset-0 cursor-pointer opacity-0"
           />
@@ -154,7 +200,7 @@ export function TranscriptUpload({ value, onChange }: TranscriptUploadProps) {
             {isProcessing ? 'Processing...' : 'Drop file here or click to upload'}
           </p>
           <p className="mt-1 text-xs text-surface-500">
-            Supports VTT, TXT, DOCX, and text-based PDF
+            Supports VTT, TXT, DOCX, PDF, and RTF files
           </p>
         </div>
       )}

@@ -1,8 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import { UserManagement } from '@/components/admin/user-management';
+import { MeetingManagement } from '@/components/admin/meeting-management';
 
-export default async function AdminUsersPage() {
+export default async function AdminMeetingsPage() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -19,32 +19,25 @@ export default async function AdminUsersPage() {
     redirect('/dashboard');
   }
 
-  // Get all users with their assigned projects
-  const { data: users } = await supabase
-    .from('profiles')
+  // Get all meetings with project info
+  const { data: meetings } = await supabase
+    .from('meetings')
     .select(`
       *,
-      project_members(
-        project_role,
-        projects(
-          id,
-          name
-        )
-      )
+      project:projects(id, name)
     `)
     .order('created_at', { ascending: false });
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-surface-900">User Management</h1>
+        <h1 className="text-2xl font-bold text-surface-900">Meeting Management</h1>
         <p className="mt-1 text-surface-500">
-          Manage user roles and permissions
+          View and manage all meetings across projects
         </p>
       </div>
 
-      <UserManagement users={users || []} />
+      <MeetingManagement meetings={meetings || []} />
     </div>
   );
 }
-

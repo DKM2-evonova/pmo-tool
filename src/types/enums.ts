@@ -20,6 +20,7 @@ export const MeetingStatus = {
   Review: 'Review',
   Published: 'Published',
   Failed: 'Failed',
+  Deleted: 'Deleted',
 } as const;
 export type MeetingStatus = (typeof MeetingStatus)[keyof typeof MeetingStatus];
 

@@ -93,6 +93,12 @@ export function KanbanBoard({ actionItems }: KanbanBoardProps) {
                 key={item.id}
                 draggable
                 onDragStart={(e) => handleDragStart(e, item.id)}
+                onClick={(e) => {
+                  // Only navigate if not dragging
+                  if (!draggingId) {
+                    router.push(`/action-items/${item.id}`);
+                  }
+                }}
                 className={cn(
                   'cursor-grab rounded-lg border border-surface-200 bg-white p-3 shadow-sm transition-all hover:shadow-md',
                   draggingId === item.id && 'opacity-50'

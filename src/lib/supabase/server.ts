@@ -1,4 +1,5 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
 // Use placeholder values during build when env vars are not available
@@ -35,27 +36,16 @@ export async function createClient() {
   );
 }
 
-export async function createServiceClient() {
-  const cookieStore = await cookies();
-
-  return createServerClient(
-    supabaseUrl,
-    supabaseServiceKey,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet: CookieToSet[]) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
-          } catch {
-            // Ignore in Server Components
-          }
-        },
-      },
+/**
+ * Creates a Supabase client with service role key that bypasses RLS.
+ * Uses createClient from @supabase/supabase-js (not createServerClient from @supabase/ssr)
+ * to ensure the service role key is properly used and not overridden by user sessions.
+ */
+export function createServiceClient() {
+  return createSupabaseClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
     }
-  );
+  });
 }

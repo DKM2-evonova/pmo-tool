@@ -48,13 +48,19 @@ export default async function ActionItemsPage({
     `
     )
     .in('project_id', projectIds.length > 0 ? projectIds : ['none'])
-    .order('created_at', { ascending: false });
+    .order('updated_at', { ascending: false });
 
   if (projectFilter) {
     query = query.eq('project_id', projectFilter);
   }
 
-  const { data: actionItems } = await query;
+  const { data: actionItems, error: actionItemsError } = await query;
+
+  console.log('Action items query result:', {
+    actionItems: actionItems?.length || 0,
+    error: actionItemsError,
+    projectIds
+  });
 
   return (
     <div className="space-y-6">
@@ -110,6 +116,24 @@ export default async function ActionItemsPage({
         <KanbanBoard actionItems={actionItems || []} />
       ) : (
         <ActionItemsTable actionItems={actionItems || []} />
+      )}
+
+      {/* Debug Info */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <h3 className="font-medium text-yellow-800">Debug Info</h3>
+          <p className="text-sm text-yellow-700 mt-1">
+            Action Items Found: {actionItems?.length || 0}
+          </p>
+          <p className="text-sm text-yellow-700">
+            Projects Found: {projects.length}
+          </p>
+          {actionItemsError && (
+            <p className="text-sm text-red-600 mt-2">
+              Error: {actionItemsError.message}
+            </p>
+          )}
+        </div>
       )}
     </div>
   );

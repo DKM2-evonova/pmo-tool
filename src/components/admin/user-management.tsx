@@ -9,7 +9,15 @@ import type { Profile } from '@/types/database';
 import type { GlobalRole } from '@/types/enums';
 
 interface UserManagementProps {
-  users: Profile[];
+  users: (Profile & {
+    project_members: Array<{
+      project_role: string;
+      projects: {
+        id: string;
+        name: string;
+      } | null;
+    }> | null;
+  })[];
 }
 
 export function UserManagement({ users }: UserManagementProps) {
@@ -90,6 +98,9 @@ export function UserManagement({ users }: UserManagementProps) {
                 Role
               </th>
               <th className="py-3 text-left text-sm font-medium text-surface-500">
+                Projects
+              </th>
+              <th className="py-3 text-left text-sm font-medium text-surface-500">
                 Joined
               </th>
               <th className="py-3 text-right text-sm font-medium text-surface-500">
@@ -133,6 +144,27 @@ export function UserManagement({ users }: UserManagementProps) {
                       <RoleIcon className="h-3.5 w-3.5" />
                       {roleLabels[user.global_role]}
                     </span>
+                  </td>
+                  <td className="py-4">
+                    <div className="flex flex-wrap gap-1">
+                      {user.project_members && user.project_members.length > 0 ? (
+                        user.project_members
+                          .filter((pm) => pm.projects)
+                          .map((pm, index) => (
+                            <span
+                              key={pm.projects?.id || index}
+                              className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2 py-1 text-xs font-medium text-primary-700"
+                            >
+                              {pm.projects?.name}
+                              {pm.project_role === 'owner' && (
+                                <span className="text-xs opacity-75">(Owner)</span>
+                              )}
+                            </span>
+                          ))
+                      ) : (
+                        <span className="text-sm text-surface-400">No projects</span>
+                      )}
+                    </div>
                   </td>
                   <td className="py-4 text-sm text-surface-500">
                     {formatDateReadable(user.created_at)}

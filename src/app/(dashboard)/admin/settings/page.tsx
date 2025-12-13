@@ -49,7 +49,7 @@ export default async function AdminSettingsPage() {
             <div>
               <p className="font-medium text-surface-900">Primary Model</p>
               <p className="text-sm text-surface-500">
-                Gemini 1.5 Pro (recaps, decisions, risk analysis)
+                Gemini 3 Pro Preview (recaps, decisions, risk analysis)
               </p>
             </div>
             <span className="badge-success">Active</span>
@@ -59,7 +59,7 @@ export default async function AdminSettingsPage() {
             <div>
               <p className="font-medium text-surface-900">Fallback Model</p>
               <p className="text-sm text-surface-500">
-                GPT-4o (used if Gemini fails)
+                GPT-5.2 (used if Gemini fails)
               </p>
             </div>
             <span className="badge-neutral">Standby</span>
@@ -69,7 +69,7 @@ export default async function AdminSettingsPage() {
             <div>
               <p className="font-medium text-surface-900">Utility Model</p>
               <p className="text-sm text-surface-500">
-                Gemini Flash (JSON validation/repair)
+                Gemini 2.5 Flash (JSON validation/repair)
               </p>
             </div>
             <span className="badge-success">Active</span>

@@ -71,6 +71,14 @@ export class LLMClient {
       }
     } catch (error) {
       console.error('Gemini failed, trying fallback:', error);
+      // Log more specific error information
+      if (error instanceof Error) {
+        console.error('Gemini error details:', {
+          message: error.message,
+          name: error.name,
+          stack: error.stack
+        });
+      }
     }
 
     // Fallback to GPT-5.2
@@ -97,7 +105,15 @@ export class LLMClient {
       }
     } catch (error) {
       console.error('GPT-5.2 fallback failed:', error);
-      throw error;
+      // Log more specific error information
+      if (error instanceof Error) {
+        console.error('OpenAI error details:', {
+          message: error.message,
+          name: error.name,
+          stack: error.stack
+        });
+      }
+      throw new Error(`Both Gemini and OpenAI failed. Gemini error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
     throw new Error('No LLM providers configured');
@@ -119,8 +135,10 @@ export class LLMClient {
     try {
       const data = JSON.parse(jsonString) as T;
       return { ...response, data };
-    } catch {
-      throw new Error('Failed to parse JSON from LLM response');
+    } catch (parseError) {
+      console.error('JSON parsing failed:', parseError);
+      console.error('Raw response content:', response.content.substring(0, 500));
+      throw new Error(`Failed to parse JSON from LLM response: ${parseError instanceof Error ? parseError.message : 'Unknown parse error'}`);
     }
   }
 
@@ -160,7 +178,7 @@ Fixed JSON:`;
       };
     }
 
-    throw new Error('Gemini 2.5 Flash not configured');
+    throw new Error('Gemini 2.5 Flash not configured for JSON repair functionality');
   }
 }
 

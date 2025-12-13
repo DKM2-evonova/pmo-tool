@@ -70,6 +70,11 @@ export function Sidebar({ projects, userRole }: SidebarProps) {
       icon: Users,
     },
     {
+      name: 'Meetings',
+      href: '/admin/meetings',
+      icon: Calendar,
+    },
+    {
       name: 'Analytics',
       href: '/admin/analytics',
       icon: BarChart3,

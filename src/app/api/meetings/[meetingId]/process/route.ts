@@ -21,6 +21,10 @@ export async function POST(
       return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
     }
 
+    if (meeting.status === 'Deleted') {
+      return NextResponse.json({ error: 'Cannot process a deleted meeting' }, { status: 400 });
+    }
+
     // Update status to Processing
     await supabase
       .from('meetings')

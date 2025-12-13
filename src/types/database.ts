@@ -113,6 +113,15 @@ export interface FishboneRendered {
   payload: string;
 }
 
+// Action Item Update
+export interface ActionItemUpdate {
+  id: string;
+  content: string;
+  created_at: string;
+  created_by_user_id: string;
+  created_by_name: string;
+}
+
 // Action Item
 export interface ActionItem extends BaseEntity {
   project_id: string;
@@ -125,10 +134,12 @@ export interface ActionItem extends BaseEntity {
   due_date: string | null;
   embedding: number[] | null;
   source_meeting_id: string | null;
+  updates: ActionItemUpdate[];
 }
 
 export interface ActionItemWithOwner extends ActionItem {
   owner?: Profile | null;
+  project?: { id: string; name: string } | null;
   source_meeting?: Meeting | null;
 }
 

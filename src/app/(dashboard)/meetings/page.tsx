@@ -18,7 +18,7 @@ export default async function MeetingsPage() {
 
   const projectIds = memberships?.map((m) => m.project_id) || [];
 
-  // Get meetings
+  // Get meetings (exclude deleted ones for regular users)
   const { data: meetings } = await supabase
     .from('meetings')
     .select(
@@ -28,6 +28,7 @@ export default async function MeetingsPage() {
     `
     )
     .in('project_id', projectIds.length > 0 ? projectIds : ['none'])
+    .neq('status', 'Deleted')
     .order('created_at', { ascending: false });
 
   const statusColors: Record<string, 'default' | 'success' | 'warning' | 'danger'> = {
@@ -36,6 +37,7 @@ export default async function MeetingsPage() {
     Review: 'warning',
     Published: 'success',
     Failed: 'danger',
+    Deleted: 'danger',
   };
 
   return (

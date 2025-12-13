@@ -13,7 +13,7 @@ export async function POST(
 ) {
   try {
     const supabase = await createClient();
-    const serviceClient = await createServiceClient();
+    const serviceClient = createServiceClient();
     const { meetingId } = await params;
 
     const {
@@ -33,6 +33,13 @@ export async function POST(
 
     if (meetingError || !meeting) {
       return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    }
+
+    if (meeting.status === 'Deleted') {
+      return NextResponse.json(
+        { error: 'Cannot publish a deleted meeting' },
+        { status: 400 }
+      );
     }
 
     if (meeting.status !== 'Review') {
