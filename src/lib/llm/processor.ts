@@ -1,0 +1,243 @@
+/**
+ * Meeting Processor - Orchestrates LLM processing pipeline
+ */
+
+import { getLLMClient } from './client';
+import { buildProcessingPrompt } from './prompts';
+import { resolveOwner, type ResolvedOwner } from './owner-resolution';
+import {
+  validateLLMOutput,
+  validateFishboneForCategory,
+  type LLMOutputContract,
+} from '@/types/llm-contract';
+import type {
+  Meeting,
+  ActionItem,
+  Decision,
+  Risk,
+  Profile,
+  ProposedActionItem,
+  ProposedDecision,
+  ProposedRisk,
+  ProposedItems,
+} from '@/types/database';
+import type { MeetingCategory } from '@/types/enums';
+import { generateId } from '@/lib/utils';
+
+export interface ProcessingResult {
+  success: boolean;
+  output?: LLMOutputContract;
+  proposedItems?: ProposedItems;
+  error?: string;
+  model: string;
+  isFallback: boolean;
+  latencyMs: number;
+}
+
+interface ProcessingContext {
+  meeting: Meeting;
+  projectMembers: Profile[];
+  openActionItems: ActionItem[];
+  openDecisions: Decision[];
+  openRisks: Risk[];
+}
+
+/**
+ * Process a meeting transcript and extract structured data
+ */
+export async function processMeeting(
+  context: ProcessingContext
+): Promise<ProcessingResult> {
+  const llm = getLLMClient();
+  const { meeting, projectMembers, openActionItems, openDecisions, openRisks } =
+    context;
+
+  if (!meeting.transcript_text || !meeting.category) {
+    return {
+      success: false,
+      error: 'Missing transcript or category',
+      model: 'none',
+      isFallback: false,
+      latencyMs: 0,
+    };
+  }
+
+  const prompt = buildProcessingPrompt({
+    category: meeting.category as MeetingCategory,
+    transcript: meeting.transcript_text,
+    attendees: (meeting.attendees as any[]) || [],
+    openActionItems,
+    openDecisions,
+    openRisks,
+  });
+
+  try {
+    // Generate with primary model (fallback handled internally)
+    const response = await llm.generateJSON<LLMOutputContract>(prompt);
+
+    // Validate the output
+    const validation = validateLLMOutput(response.data);
+
+    if (!validation.success) {
+      // Try to repair with utility model
+      console.log('Attempting JSON repair...');
+      const schemaStr = JSON.stringify(validation.errors?.issues);
+      const repairResponse = await llm.repairJSON(
+        JSON.stringify(response.data),
+        schemaStr
+      );
+
+      try {
+        const repairedData = JSON.parse(repairResponse.content);
+        const revalidation = validateLLMOutput(repairedData);
+
+        if (!revalidation.success) {
+          return {
+            success: false,
+            error: `JSON validation failed after repair: ${revalidation.errors?.issues.map((i) => i.message).join(', ')}`,
+            model: response.model,
+            isFallback: response.isFallback,
+            latencyMs: response.latencyMs,
+          };
+        }
+
+        response.data = revalidation.data!;
+      } catch {
+        return {
+          success: false,
+          error: 'Failed to repair invalid JSON output',
+          model: response.model,
+          isFallback: response.isFallback,
+          latencyMs: response.latencyMs,
+        };
+      }
+    }
+
+    // Validate fishbone for category
+    const fishboneValidation = validateFishboneForCategory(
+      response.data.fishbone,
+      meeting.category
+    );
+    if (!fishboneValidation.valid) {
+      return {
+        success: false,
+        error: fishboneValidation.message,
+        model: response.model,
+        isFallback: response.isFallback,
+        latencyMs: response.latencyMs,
+      };
+    }
+
+    // Transform to proposed items with owner resolution
+    const proposedItems = transformToProposedItems(
+      response.data,
+      projectMembers,
+      (meeting.attendees as any[]) || []
+    );
+
+    return {
+      success: true,
+      output: response.data,
+      proposedItems,
+      model: response.model,
+      isFallback: response.isFallback,
+      latencyMs: response.latencyMs,
+    };
+  } catch (error) {
+    console.error('Meeting processing failed:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      model: 'unknown',
+      isFallback: false,
+      latencyMs: 0,
+    };
+  }
+}
+
+/**
+ * Transform LLM output to proposed items with owner resolution
+ */
+function transformToProposedItems(
+  output: LLMOutputContract,
+  projectMembers: Profile[],
+  attendees: any[]
+): ProposedItems {
+  const resolutionContext = { projectMembers, attendees };
+
+  // Transform action items
+  const actionItems: ProposedActionItem[] = output.action_items.map((ai) => {
+    const resolved = resolveOwner(ai.owner, resolutionContext);
+    return {
+      temp_id: generateId(),
+      operation: ai.operation,
+      external_id: ai.external_id,
+      title: ai.title,
+      description: ai.description,
+      status: ai.status as any,
+      owner: {
+        name: resolved.name,
+        email: resolved.email,
+        resolved_user_id: resolved.resolvedUserId,
+      },
+      owner_resolution_status: resolved.resolutionStatus,
+      due_date: ai.due_date,
+      evidence: ai.evidence,
+      accepted: true,
+      duplicate_of: null,
+      similarity_score: null,
+    };
+  });
+
+  // Transform decisions
+  const decisions: ProposedDecision[] = output.decisions.map((d) => {
+    const resolved = resolveOwner(d.decision_maker, resolutionContext);
+    return {
+      temp_id: generateId(),
+      operation: d.operation,
+      title: d.title,
+      rationale: d.rationale,
+      impact: d.impact,
+      decision_maker: {
+        name: resolved.name,
+        email: resolved.email,
+        resolved_user_id: resolved.resolvedUserId,
+      },
+      decision_maker_resolution_status: resolved.resolutionStatus,
+      outcome: d.outcome,
+      evidence: d.evidence,
+      accepted: true,
+      duplicate_of: null,
+      similarity_score: null,
+    };
+  });
+
+  // Transform risks
+  const risks: ProposedRisk[] = output.risks.map((r) => {
+    const resolved = resolveOwner(r.owner, resolutionContext);
+    return {
+      temp_id: generateId(),
+      operation: r.operation,
+      external_id: null,
+      title: r.title,
+      description: r.description,
+      probability: r.probability as any,
+      impact: r.impact as any,
+      mitigation: r.mitigation,
+      owner: {
+        name: resolved.name,
+        email: resolved.email,
+        resolved_user_id: resolved.resolvedUserId,
+      },
+      owner_resolution_status: resolved.resolutionStatus,
+      status: r.status as any,
+      evidence: r.evidence,
+      accepted: true,
+      duplicate_of: null,
+      similarity_score: null,
+    };
+  });
+
+  return { action_items: actionItems, decisions, risks };
+}
+
