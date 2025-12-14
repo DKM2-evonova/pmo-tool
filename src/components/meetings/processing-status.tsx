@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, AlertTriangle, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui';
 
 interface ProcessingStatusProps {
   meetingId: string;
   projectId: string;
   initialStatus: string;
+  estimatedProcessingMs?: number; // Estimated processing time based on historical data
 }
 
 type ProcessingStep =
@@ -19,10 +20,28 @@ type ProcessingStep =
   | 'complete'
   | 'failed';
 
+// Sub-stages shown during AI processing to keep users engaged
+const AI_PROCESSING_SUBSTAGES = [
+  { message: 'Scanning document structure...', icon: '📄' },
+  { message: 'Parsing conversation flow...', icon: '💬' },
+  { message: 'Identifying key participants...', icon: '👥' },
+  { message: 'Extracting discussion topics...', icon: '🎯' },
+  { message: 'Detecting action items...', icon: '✅' },
+  { message: 'Analyzing decision points...', icon: '🔍' },
+  { message: 'Identifying potential risks...', icon: '⚠️' },
+  { message: 'Understanding context and nuances...', icon: '🧠' },
+  { message: 'Cross-referencing project history...', icon: '📊' },
+  { message: 'Resolving owner assignments...', icon: '👤' },
+  { message: 'Generating meeting summary...', icon: '📝' },
+  { message: 'Polishing insights...', icon: '✨' },
+  { message: 'Almost there, finalizing analysis...', icon: '🚀' },
+];
+
 export function ProcessingStatus({
   meetingId,
   projectId,
   initialStatus,
+  estimatedProcessingMs = 30000,
 }: ProcessingStatusProps) {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState<ProcessingStep>(
@@ -30,6 +49,8 @@ export function ProcessingStatus({
   );
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  const [aiSubstageIndex, setAiSubstageIndex] = useState(0);
+  const substageIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const steps = [
     { id: 'loading_context', label: 'Loading project context...' },
@@ -38,6 +59,54 @@ export function ProcessingStatus({
     { id: 'checking_duplicates', label: 'Checking for duplicates...' },
     { id: 'complete', label: 'Processing complete!' },
   ];
+
+  // Calculate substage interval based on estimated processing time
+  // We want to show enough substages to fill the expected time, but not too fast
+  const calculateSubstageInterval = () => {
+    const numSubstages = AI_PROCESSING_SUBSTAGES.length;
+    // Use 80% of estimated time to cycle through substages (leave buffer for variance)
+    const targetDuration = estimatedProcessingMs * 0.8;
+    // Calculate interval, but keep it between 1.5s (fast) and 6s (slow)
+    const calculatedInterval = targetDuration / numSubstages;
+    return Math.max(1500, Math.min(6000, calculatedInterval));
+  };
+
+  const substageInterval = calculateSubstageInterval();
+  
+  // Determine if we should show substages at all (skip if very fast processing expected)
+  const showSubstages = estimatedProcessingMs > 8000;
+
+  // Handle AI substage cycling during processing
+  useEffect(() => {
+    if (currentStep === 'processing' && showSubstages) {
+      // Start cycling through substages
+      substageIntervalRef.current = setInterval(() => {
+        setAiSubstageIndex((prev) => {
+          // Cycle through substages, but slow down towards the end
+          const nextIndex = prev + 1;
+          if (nextIndex >= AI_PROCESSING_SUBSTAGES.length) {
+            // Stay on the last substage
+            return AI_PROCESSING_SUBSTAGES.length - 1;
+          }
+          return nextIndex;
+        });
+        // Also increment progress slightly during processing
+        setProgress((prev) => Math.min(prev + 2, 65));
+      }, substageInterval);
+    } else {
+      // Clear interval when not processing
+      if (substageIntervalRef.current) {
+        clearInterval(substageIntervalRef.current);
+        substageIntervalRef.current = null;
+      }
+    }
+
+    return () => {
+      if (substageIntervalRef.current) {
+        clearInterval(substageIntervalRef.current);
+      }
+    };
+  }, [currentStep, substageInterval, showSubstages]);
 
   useEffect(() => {
     if (initialStatus === 'Failed') {
@@ -96,6 +165,7 @@ export function ProcessingStatus({
     setError(null);
     setCurrentStep('loading_context');
     setProgress(0);
+    setAiSubstageIndex(0);
     // Re-trigger processing
     router.refresh();
   };
@@ -121,36 +191,78 @@ export function ProcessingStatus({
             (currentStep === 'complete' && index === steps.length - 1);
           const isCurrent = step.id === currentStep;
           const isPending = index > stepIndex;
+          const isProcessingStep = step.id === 'processing';
 
           return (
-            <div
-              key={step.id}
-              className={`flex items-center gap-3 ${
-                isPending ? 'opacity-40' : ''
-              }`}
-            >
-              <div className="flex h-8 w-8 items-center justify-center">
-                {isComplete ? (
-                  <CheckCircle className="h-6 w-6 text-success-500" />
-                ) : isCurrent ? (
-                  currentStep === 'failed' ? (
-                    <XCircle className="h-6 w-6 text-danger-500" />
-                  ) : (
-                    <Loader2 className="h-6 w-6 animate-spin text-primary-500" />
-                  )
-                ) : (
-                  <div className="h-3 w-3 rounded-full bg-surface-300" />
-                )}
-              </div>
-              <span
-                className={`text-sm ${
-                  isCurrent
-                    ? 'font-medium text-surface-900'
-                    : 'text-surface-500'
+            <div key={step.id}>
+              <div
+                className={`flex items-center gap-3 ${
+                  isPending ? 'opacity-40' : ''
                 }`}
               >
-                {step.label}
-              </span>
+                <div className="flex h-8 w-8 items-center justify-center">
+                  {isComplete ? (
+                    <CheckCircle className="h-6 w-6 text-success-500" />
+                  ) : isCurrent ? (
+                    currentStep === 'failed' ? (
+                      <XCircle className="h-6 w-6 text-danger-500" />
+                    ) : (
+                      <Loader2 className="h-6 w-6 animate-spin text-primary-500" />
+                    )
+                  ) : (
+                    <div className="h-3 w-3 rounded-full bg-surface-300" />
+                  )}
+                </div>
+                <span
+                  className={`text-sm ${
+                    isCurrent
+                      ? 'font-medium text-surface-900'
+                      : 'text-surface-500'
+                  }`}
+                >
+                  {step.label}
+                </span>
+              </div>
+              
+              {/* AI Processing substages - only shown if processing takes more than 8 seconds */}
+              {isProcessingStep && isCurrent && currentStep !== 'failed' && showSubstages && (
+                <div className="ml-11 mt-3 overflow-hidden rounded-lg border border-primary-100 bg-gradient-to-r from-primary-50 to-purple-50 p-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl animate-pulse" role="img" aria-label="status">
+                      {AI_PROCESSING_SUBSTAGES[aiSubstageIndex].icon}
+                    </span>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-primary-700 transition-all duration-300">
+                        {AI_PROCESSING_SUBSTAGES[aiSubstageIndex].message}
+                      </p>
+                      <div className="mt-2 flex items-center gap-2">
+                        <Sparkles className="h-3 w-3 text-purple-400" />
+                        <p className="text-xs text-surface-500">
+                          AI is carefully analyzing your meeting transcript
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Substage progress dots */}
+                  <div className="mt-3 flex items-center gap-1">
+                    {AI_PROCESSING_SUBSTAGES.slice(0, 8).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`h-1.5 w-1.5 rounded-full transition-all duration-300 ${
+                          i <= aiSubstageIndex
+                            ? 'bg-primary-400'
+                            : 'bg-surface-200'
+                        }`}
+                      />
+                    ))}
+                    {aiSubstageIndex >= 8 && (
+                      <div className="ml-1 text-xs text-primary-400">
+                        +{Math.min(aiSubstageIndex - 7, 5)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}

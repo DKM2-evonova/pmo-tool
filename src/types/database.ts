@@ -68,6 +68,9 @@ export interface Meeting extends BaseEntity {
   fishbone: FishboneData | null;
   processed_at: string | null;
   error_message: string | null;
+  source_file_path: string | null;
+  source_file_name: string | null;
+  source_file_type: string | null;
 }
 
 export interface MeetingAttendee {
@@ -78,6 +81,30 @@ export interface MeetingAttendee {
 export interface MeetingRecap {
   summary: string;
   highlights: string[];
+  key_topics: KeyTopic[];
+  action_items_summary: ActionItemSummary[];
+  outstanding_topics: OutstandingTopic[];
+}
+
+export interface KeyTopic {
+  topic: string;
+  discussion: string;
+  participants: string[];
+  outcome: string | null;
+}
+
+export interface ActionItemSummary {
+  title: string;
+  owner: string;
+  due_date: string | null;
+  status: EntityStatus;
+}
+
+export interface OutstandingTopic {
+  topic: string;
+  context: string;
+  blockers: string[];
+  suggested_next_steps: string[];
 }
 
 export interface MeetingTone {

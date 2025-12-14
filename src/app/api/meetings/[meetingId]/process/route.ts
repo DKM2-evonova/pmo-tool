@@ -106,14 +106,19 @@ export async function POST(
       throw updateError;
     }
 
-    // Create proposed change set
+    // Create or update proposed change set
     const { error: changeSetError } = await supabase
       .from('proposed_change_sets')
-      .upsert({
-        meeting_id: meetingId,
-        proposed_items: result.proposedItems,
-        lock_version: 1,
-      });
+      .upsert(
+        {
+          meeting_id: meetingId,
+          proposed_items: result.proposedItems,
+          lock_version: 1,
+        },
+        {
+          onConflict: 'meeting_id',
+        }
+      );
 
     if (changeSetError) {
       throw changeSetError;
@@ -126,10 +131,9 @@ export async function POST(
     });
   } catch (error) {
     console.error('Processing API error:', error);
-    return NextResponse.json(
-      { error: 'Processing failed' },
-      { status: 500 }
-    );
+    const errorMessage =
+      error instanceof Error ? error.message : 'Processing failed';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
 

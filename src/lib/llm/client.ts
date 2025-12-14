@@ -3,10 +3,35 @@
  * Supports Gemini 3 Pro Preview (primary), GPT-5.2 (fallback), and Gemini 2.5 Flash (utility)
  */
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, GenerationConfig } from '@google/generative-ai';
 import OpenAI from 'openai';
 
 export type LLMModel = 'gemini-3-pro-preview' | 'gpt-5.2' | 'gemini-2.5-flash';
+
+/**
+ * LLM Generation Settings
+ * These settings are optimized for quality meeting analysis output.
+ * Increase maxOutputTokens if output is being truncated.
+ */
+export const LLM_SETTINGS = {
+  // Primary model (Gemini) settings
+  gemini: {
+    maxOutputTokens: 8192, // Allows complete extraction of all items with evidence
+    temperature: 0.3, // Low for consistent, structured JSON output
+    topP: 0.95, // Slightly reduced to focus on higher-probability tokens
+    topK: 40, // Limits vocabulary for more consistent output
+  },
+  // Fallback model (OpenAI) settings
+  openai: {
+    maxTokens: 8192, // Match Gemini for consistency
+    temperature: 0.3, // Low for structured output
+  },
+  // Utility model (Gemini Flash) settings - for JSON repair
+  geminiFlash: {
+    maxOutputTokens: 4096, // Sufficient for JSON repair tasks
+    temperature: 0.1, // Very low for deterministic JSON output
+  },
+} as const;
 
 interface LLMResponse {
   content: string;
@@ -48,7 +73,17 @@ export class LLMClient {
     // Try Gemini first
     try {
       if (this.gemini) {
-        const model = this.gemini.getGenerativeModel({ model: 'gemini-3-pro-preview' });
+        const generationConfig: GenerationConfig = {
+          maxOutputTokens: LLM_SETTINGS.gemini.maxOutputTokens,
+          temperature: LLM_SETTINGS.gemini.temperature,
+          topP: LLM_SETTINGS.gemini.topP,
+          topK: LLM_SETTINGS.gemini.topK,
+        };
+        
+        const model = this.gemini.getGenerativeModel({ 
+          model: 'gemini-3-pro-preview',
+          generationConfig,
+        });
         const result = await model.generateContent({
           contents: [
             {
@@ -93,7 +128,9 @@ export class LLMClient {
         const response = await this.openai.chat.completions.create({
           model: 'gpt-5.2',
           messages,
-          temperature: 0.3,
+          temperature: LLM_SETTINGS.openai.temperature,
+          max_tokens: LLM_SETTINGS.openai.maxTokens,
+          response_format: { type: 'json_object' }, // Ensures valid JSON output
         });
 
         return {
@@ -162,7 +199,15 @@ ${invalidJson}
 Fixed JSON:`;
 
     if (this.gemini) {
-      const model = this.gemini.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const generationConfig: GenerationConfig = {
+        maxOutputTokens: LLM_SETTINGS.geminiFlash.maxOutputTokens,
+        temperature: LLM_SETTINGS.geminiFlash.temperature,
+      };
+      
+      const model = this.gemini.getGenerativeModel({ 
+        model: 'gemini-2.5-flash',
+        generationConfig,
+      });
       const result = await model.generateContent(prompt);
       const text = result.response.text();
 

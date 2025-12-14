@@ -4,12 +4,20 @@ import { useState, useRef } from 'react';
 import { Upload, FileText, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+export interface UploadedFileInfo {
+  file: File;
+  name: string;
+  type: string;
+  size: number;
+}
+
 interface TranscriptUploadProps {
   value: string;
   onChange: (value: string) => void;
+  onFileUploaded?: (fileInfo: UploadedFileInfo | null) => void;
 }
 
-export function TranscriptUpload({ value, onChange }: TranscriptUploadProps) {
+export function TranscriptUpload({ value, onChange, onFileUploaded }: TranscriptUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -17,6 +25,7 @@ export function TranscriptUpload({ value, onChange }: TranscriptUploadProps) {
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const [showDebug, setShowDebug] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [currentFile, setCurrentFile] = useState<File | null>(null);
 
   const supportedTypes = [
     'text/plain',
@@ -62,6 +71,9 @@ export function TranscriptUpload({ value, onChange }: TranscriptUploadProps) {
     setError(null);
 
     try {
+      // Store the file for later upload
+      setCurrentFile(file);
+      
       // Handle text files directly on client
       if (file.type === 'text/plain' || file.name.endsWith('.vtt')) {
         const text = await file.text();
@@ -69,6 +81,13 @@ export function TranscriptUpload({ value, onChange }: TranscriptUploadProps) {
         const cleanedText = cleanVTT(text);
         onChange(cleanedText);
         setFileName(file.name);
+        // Notify parent about the file
+        onFileUploaded?.({
+          file,
+          name: file.name,
+          type: file.type || 'text/plain',
+          size: file.size,
+        });
       }
       // Handle DOCX, PDF, and RTF files via server-side processing
       else if (
@@ -81,10 +100,12 @@ export function TranscriptUpload({ value, onChange }: TranscriptUploadProps) {
       ) {
         await processFileOnServer(file);
       } else {
+        setCurrentFile(null);
         setError('Unsupported file type. Please use TXT, VTT, DOCX, or PDF.');
       }
     } catch (err) {
       console.error('Error processing file:', err);
+      setCurrentFile(null);
       setError('Failed to process file. Please try again or paste text.');
     } finally {
       setIsProcessing(false);
@@ -135,8 +156,16 @@ export function TranscriptUpload({ value, onChange }: TranscriptUploadProps) {
 
       onChange(extractedText);
       setFileName(result.fileName);
+      // Notify parent about the file
+      onFileUploaded?.({
+        file,
+        name: file.name,
+        type: file.type || 'application/octet-stream',
+        size: file.size,
+      });
     } catch (err) {
       console.error('Server processing error:', err);
+      setCurrentFile(null);
       setError(err instanceof Error ? err.message : 'Failed to process file on server');
     }
   };
@@ -200,6 +229,8 @@ export function TranscriptUpload({ value, onChange }: TranscriptUploadProps) {
     setError(null);
     setDebugInfo(null);
     setShowDebug(false);
+    setCurrentFile(null);
+    onFileUploaded?.(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }

@@ -46,10 +46,52 @@
     },
     "recap": {
       "type": "object",
-      "required": ["summary","highlights"],
+      "required": ["summary","highlights","key_topics","action_items_summary","outstanding_topics"],
       "properties": {
-        "summary": {"type": "string"},
-        "highlights": {"type": "array", "items": {"type": "string"}}
+        "summary": {"type": "string", "description": "2-3 paragraph executive summary of the meeting"},
+        "highlights": {"type": "array", "items": {"type": "string"}, "description": "Brief key points from the meeting"},
+        "key_topics": {
+          "type": "array",
+          "description": "3-5 major discussion topics with detailed context",
+          "items": {
+            "type": "object",
+            "required": ["topic","discussion","participants","outcome"],
+            "properties": {
+              "topic": {"type": "string"},
+              "discussion": {"type": "string", "description": "Detailed summary of what was discussed (2-4 sentences)"},
+              "participants": {"type": "array", "items": {"type": "string"}},
+              "outcome": {"type": ["string","null"], "description": "Resolution reached, or null if still open"}
+            }
+          }
+        },
+        "action_items_summary": {
+          "type": "array",
+          "description": "Summary of action items for quick recap display (must match items in action_items array)",
+          "items": {
+            "type": "object",
+            "required": ["title","owner","due_date","status"],
+            "properties": {
+              "title": {"type": "string"},
+              "owner": {"type": "string"},
+              "due_date": {"type": ["string","null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+              "status": {"enum": ["Open","In Progress","Closed"]}
+            }
+          }
+        },
+        "outstanding_topics": {
+          "type": "array",
+          "description": "Topics raised but not resolved in this meeting",
+          "items": {
+            "type": "object",
+            "required": ["topic","context","blockers","suggested_next_steps"],
+            "properties": {
+              "topic": {"type": "string"},
+              "context": {"type": "string", "description": "Why this topic was raised and what was discussed"},
+              "blockers": {"type": "array", "items": {"type": "string"}},
+              "suggested_next_steps": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        }
       }
     },
     "tone": {

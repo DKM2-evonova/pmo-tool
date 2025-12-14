@@ -96,8 +96,32 @@ Return a JSON object matching this exact schema:
     "attendees": [{"name": "string", "email": "string or null"}]
   },
   "recap": {
-    "summary": "2-3 paragraph summary of the meeting",
-    "highlights": ["Key point 1", "Key point 2", "..."]
+    "summary": "2-3 paragraph executive summary of the meeting",
+    "highlights": ["Key point 1", "Key point 2", "..."],
+    "key_topics": [
+      {
+        "topic": "Topic title",
+        "discussion": "Detailed summary of what was discussed about this topic (2-4 sentences)",
+        "participants": ["Name1", "Name2"],
+        "outcome": "Resolution or conclusion reached (null if still open)"
+      }
+    ],
+    "action_items_summary": [
+      {
+        "title": "Action item title (must match an action_item from the action_items array)",
+        "owner": "Owner name",
+        "due_date": "YYYY-MM-DD or null",
+        "status": "Open|In Progress|Closed"
+      }
+    ],
+    "outstanding_topics": [
+      {
+        "topic": "Unresolved topic title",
+        "context": "Why this topic was raised and what was discussed",
+        "blockers": ["Blocker 1", "Blocker 2"],
+        "suggested_next_steps": ["Next step 1", "Next step 2"]
+      }
+    ]
   },
   "tone": {
     "overall": "Description of overall meeting tone",
@@ -170,6 +194,9 @@ Return a JSON object matching this exact schema:
 5. ${category === 'Remediation' ? 'FISHBONE IS REQUIRED: Create a root cause analysis.' : 'FISHBONE: Set enabled to false.'}
 6. ${category === 'Governance' ? 'OUTCOME IS REQUIRED: Every decision must have a clear outcome.' : ''}
 7. ${category === 'Alignment' ? 'TONE IS CRITICAL: Carefully assess each participant\'s happiness and buy-in.' : ''}
+8. KEY TOPICS: Identify 3-5 major discussion topics. Include detailed context about what was discussed and who participated.
+9. ACTION ITEMS SUMMARY: The action_items_summary in recap MUST correspond to items in the action_items array. Include all action items.
+10. OUTSTANDING TOPICS: Identify any topics that were raised but NOT resolved in this meeting. Include blockers and suggested next steps.
 
 Return ONLY the JSON object, no additional text.`;
 }

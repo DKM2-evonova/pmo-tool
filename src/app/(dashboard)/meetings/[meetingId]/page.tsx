@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { notFound, redirect } from 'next/navigation';
 import { ReviewUI } from '@/components/meetings/review-ui';
 import { MeetingDetails } from '@/components/meetings/meeting-details';
+import { RecapDisplay } from '@/components/meetings/recap-display';
 
 interface MeetingPageProps {
   params: Promise<{ meetingId: string }>;
@@ -109,38 +110,26 @@ export default async function MeetingPage({ params }: MeetingPageProps) {
 
       {/* Published view */}
       {meeting.status === 'Published' && (
-        <div className="card">
-          <div className="mb-4 flex items-center gap-2">
-            <span className="badge-success">Published</span>
-            <span className="text-sm text-surface-500">
-              Processed on{' '}
-              {new Date(meeting.processed_at).toLocaleDateString()}
-            </span>
+        <>
+          <div className="card">
+            <div className="flex items-center gap-2">
+              <span className="badge-success">Published</span>
+              <span className="text-sm text-surface-500">
+                Processed on{' '}
+                {new Date(meeting.processed_at).toLocaleDateString()}
+              </span>
+            </div>
           </div>
 
-          {/* Recap */}
+          {/* Recap with all sections */}
           {meeting.recap && (
-            <div className="mb-6">
-              <h2 className="mb-2 text-lg font-semibold text-surface-900">
-                Recap
-              </h2>
-              <p className="text-surface-700">
-                {(meeting.recap as any).summary}
-              </p>
-              {(meeting.recap as any).highlights?.length > 0 && (
-                <ul className="mt-3 list-inside list-disc space-y-1">
-                  {(meeting.recap as any).highlights.map(
-                    (h: string, i: number) => (
-                      <li key={i} className="text-surface-600">
-                        {h}
-                      </li>
-                    )
-                  )}
-                </ul>
-              )}
-            </div>
+            <RecapDisplay
+              recap={meeting.recap as any}
+              tone={meeting.tone as any}
+              showTone={meeting.category === 'Alignment'}
+            />
           )}
-        </div>
+        </>
       )}
 
       {/* Failed view */}

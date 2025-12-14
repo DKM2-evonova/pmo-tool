@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button, Select, Input } from '@/components/ui';
-import { TranscriptUpload } from './transcript-upload';
+import { TranscriptUpload, UploadedFileInfo } from './transcript-upload';
 import { AttendeeInput } from './attendee-input';
 import { CategorySelector } from './category-selector';
 import {
@@ -41,6 +41,7 @@ export function MeetingIngestion({
   const [transcriptText, setTranscriptText] = useState('');
   const [attendees, setAttendees] = useState<MeetingAttendee[]>([]);
   const [category, setCategory] = useState<MeetingCategory | ''>('');
+  const [uploadedFile, setUploadedFile] = useState<UploadedFileInfo | null>(null);
 
   const canProceed = () => {
     switch (step) {
@@ -75,7 +76,7 @@ export function MeetingIngestion({
     setIsSubmitting(true);
 
     try {
-      // Create meeting record
+      // Create meeting record first to get the ID
       const { data: meeting, error } = await supabase
         .from('meetings')
         .insert({
@@ -91,6 +92,33 @@ export function MeetingIngestion({
         .single();
 
       if (error) throw error;
+
+      // Upload source file to storage if one was provided
+      if (uploadedFile) {
+        const filePath = `${projectId}/${meeting.id}/${uploadedFile.name}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('meeting-files')
+          .upload(filePath, uploadedFile.file, {
+            contentType: uploadedFile.type,
+            upsert: true,
+          });
+
+        if (uploadError) {
+          console.error('Error uploading file:', uploadError);
+          // Continue anyway - the meeting is created, just without the file
+        } else {
+          // Update meeting with file info
+          await supabase
+            .from('meetings')
+            .update({
+              source_file_path: filePath,
+              source_file_name: uploadedFile.name,
+              source_file_type: uploadedFile.type,
+            })
+            .eq('id', meeting.id);
+        }
+      }
 
       // Navigate to the meeting processing page
       router.push(`/meetings/${meeting.id}/process`);
@@ -181,6 +209,7 @@ export function MeetingIngestion({
             <TranscriptUpload
               value={transcriptText}
               onChange={setTranscriptText}
+              onFileUploaded={setUploadedFile}
             />
 
             <div className="border-t border-surface-200 pt-6">
@@ -244,6 +273,12 @@ export function MeetingIngestion({
                 <span className="text-surface-500">Attendees</span>
                 <span className="font-medium text-surface-900">
                   {attendees.length} people
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-surface-500">Source File</span>
+                <span className="font-medium text-surface-900">
+                  {uploadedFile ? uploadedFile.name : 'Pasted text (no file)'}
                 </span>
               </div>
             </div>

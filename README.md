@@ -26,6 +26,7 @@ The PMO Tool is an automation layer that sits on top of an organization's existi
 - **RBAC**: Role-based access control with project scoping
 - **Evidence Trail**: All extracted items include transcript evidence for auditability
 - **Cost Monitoring**: Circuit breaker alerts when fallback LLM usage exceeds 15% in 24-hour window
+- **Processing Time Estimation**: Dynamic processing time estimates based on historical LLM performance data
 
 ## Tech Stack
 
@@ -147,6 +148,10 @@ supabase/
 - `proposed_change_sets` - Staging area for reviews
 - `audit_logs` - Change audit trail
 - `llm_metrics` - LLM usage tracking
+
+### Database Functions
+
+- `get_avg_processing_time_ms()` - Returns average processing time from recent successful LLM requests (last 7 days) for analytics and user experience improvements
 
 ## Deployment
 
@@ -320,6 +325,7 @@ The system pre-fetches all open action items, risks, and decisions for the selec
 - Severity matrix calculation (High/Med/Low) based on risk scores
 - Status tracking with update history and comments
 - Visual dashboard showing risk distribution by severity
+- Filtering by severity (High/Medium/Low) and status
 
 ## Troubleshooting
 

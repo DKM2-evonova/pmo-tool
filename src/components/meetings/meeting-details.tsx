@@ -1,7 +1,11 @@
+'use client';
+
+import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Calendar, Users, Tag } from 'lucide-react';
+import { ArrowLeft, Calendar, Users, Tag, FileText, Download, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui';
 import { formatDateReadable } from '@/lib/utils';
+import { createClient } from '@/lib/supabase/client';
 import type { Meeting } from '@/types/database';
 
 interface MeetingDetailsProps {
@@ -9,12 +13,47 @@ interface MeetingDetailsProps {
 }
 
 export function MeetingDetails({ meeting }: MeetingDetailsProps) {
+  const [isDownloading, setIsDownloading] = useState(false);
+  const supabase = createClient();
+
   const statusVariant: Record<string, 'default' | 'success' | 'warning' | 'danger'> = {
     Draft: 'default',
     Processing: 'default',
     Review: 'warning',
     Published: 'success',
     Failed: 'danger',
+  };
+
+  const handleDownloadFile = async () => {
+    if (!meeting.source_file_path) return;
+
+    setIsDownloading(true);
+    try {
+      const { data, error } = await supabase.storage
+        .from('meeting-files')
+        .download(meeting.source_file_path);
+
+      if (error) {
+        console.error('Error downloading file:', error);
+        alert('Failed to download file. Please try again.');
+        return;
+      }
+
+      // Create download link
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = meeting.source_file_name || 'transcript';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      alert('Failed to download file. Please try again.');
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   return (
@@ -50,6 +89,21 @@ export function MeetingDetails({ meeting }: MeetingDetailsProps) {
               <Users className="h-4 w-4" />
               {(meeting.attendees as any[]).length} attendees
             </span>
+          )}
+          {meeting.source_file_name && (
+            <button
+              onClick={handleDownloadFile}
+              disabled={isDownloading}
+              className="flex items-center gap-1 text-primary-600 hover:text-primary-700 hover:underline disabled:opacity-50"
+            >
+              {isDownloading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileText className="h-4 w-4" />
+              )}
+              <span>{meeting.source_file_name}</span>
+              <Download className="h-3 w-3" />
+            </button>
           )}
         </div>
       </div>

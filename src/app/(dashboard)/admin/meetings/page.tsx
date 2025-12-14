@@ -41,3 +41,5 @@ export default async function AdminMeetingsPage() {
     </div>
   );
 }
+
+

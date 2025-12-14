@@ -26,3 +26,4 @@ export async function POST() {
     return NextResponse.json({ error: 'Failed to refresh schema' }, { status: 500 });
   }
 }
+

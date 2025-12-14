@@ -12,17 +12,22 @@ export default async function ProcessMeetingPage({
   const supabase = await createClient();
   const { meetingId } = await params;
 
-  // Get meeting
-  const { data: meeting, error } = await supabase
-    .from('meetings')
-    .select(
+  // Get meeting and average processing time in parallel
+  const [meetingResult, avgTimeResult] = await Promise.all([
+    supabase
+      .from('meetings')
+      .select(
+        `
+        *,
+        project:projects(id, name)
       `
-      *,
-      project:projects(id, name)
-    `
-    )
-    .eq('id', meetingId)
-    .single();
+      )
+      .eq('id', meetingId)
+      .single(),
+    supabase.rpc('get_avg_processing_time_ms'),
+  ]);
+
+  const { data: meeting, error } = meetingResult;
 
   if (error || !meeting) {
     notFound();
@@ -32,6 +37,9 @@ export default async function ProcessMeetingPage({
   if (meeting.status === 'Review' || meeting.status === 'Published') {
     redirect(`/meetings/${meetingId}`);
   }
+
+  // Get estimated processing time (default to 30 seconds if no data)
+  const estimatedMs = avgTimeResult.data?.[0]?.avg_latency_ms ?? 30000;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -48,6 +56,7 @@ export default async function ProcessMeetingPage({
         meetingId={meeting.id}
         projectId={meeting.project_id}
         initialStatus={meeting.status}
+        estimatedProcessingMs={estimatedMs}
       />
     </div>
   );

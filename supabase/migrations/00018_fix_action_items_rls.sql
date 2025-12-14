@@ -48,3 +48,5 @@ CREATE POLICY "Project members can delete action items"
     is_admin(auth.uid())
   );
 
+
+

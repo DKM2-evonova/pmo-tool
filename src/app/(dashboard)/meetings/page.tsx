@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
-import { Calendar, Plus, Filter } from 'lucide-react';
+import { Calendar, Plus, Filter, Paperclip } from 'lucide-react';
 import { formatDateReadable } from '@/lib/utils';
 import { Badge } from '@/components/ui';
 
@@ -81,12 +81,19 @@ export default async function MeetingsPage() {
               {meetings.map((meeting) => (
                 <tr key={meeting.id} className="hover:bg-surface-50">
                   <td className="px-6 py-4">
-                    <Link
-                      href={`/meetings/${meeting.id}`}
-                      className="font-medium text-surface-900 hover:text-primary-600"
-                    >
-                      {meeting.title || 'Untitled Meeting'}
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/meetings/${meeting.id}`}
+                        className="font-medium text-surface-900 hover:text-primary-600"
+                      >
+                        {meeting.title || 'Untitled Meeting'}
+                      </Link>
+                      {meeting.source_file_name && (
+                        <span title={`Source file: ${meeting.source_file_name}`}>
+                          <Paperclip className="h-4 w-4 text-surface-400" />
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-surface-500">
                     {(meeting.project as unknown as { name: string })?.name || 'Unknown'}

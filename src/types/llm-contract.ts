@@ -44,10 +44,37 @@ const MeetingSchema = z.object({
   attendees: z.array(AttendeeSchema),
 });
 
+// Key Discussion Topic schema
+const KeyTopicSchema = z.object({
+  topic: z.string(),
+  discussion: z.string(),
+  participants: z.array(z.string()),
+  outcome: z.string().nullable(),
+});
+
+// Action Item Summary schema (for recap display, tied to extracted items)
+const ActionItemSummarySchema = z.object({
+  title: z.string(),
+  owner: z.string(),
+  due_date: z.string().nullable(),
+  status: z.enum(['Open', 'In Progress', 'Closed']),
+});
+
+// Outstanding Topic schema
+const OutstandingTopicSchema = z.object({
+  topic: z.string(),
+  context: z.string(),
+  blockers: z.array(z.string()),
+  suggested_next_steps: z.array(z.string()),
+});
+
 // Recap schema
 const RecapSchema = z.object({
   summary: z.string(),
   highlights: z.array(z.string()),
+  key_topics: z.array(KeyTopicSchema),
+  action_items_summary: z.array(ActionItemSummarySchema),
+  outstanding_topics: z.array(OutstandingTopicSchema),
 });
 
 // Tone schema
@@ -147,6 +174,9 @@ export type LLMMeeting = z.infer<typeof MeetingSchema>;
 export type LLMRecap = z.infer<typeof RecapSchema>;
 export type LLMTone = z.infer<typeof ToneSchema>;
 export type LLMFishbone = z.infer<typeof FishboneSchema>;
+export type LLMKeyTopic = z.infer<typeof KeyTopicSchema>;
+export type LLMActionItemSummary = z.infer<typeof ActionItemSummarySchema>;
+export type LLMOutstandingTopic = z.infer<typeof OutstandingTopicSchema>;
 
 // Validation function
 export function validateLLMOutput(data: unknown): {

@@ -12,3 +12,5 @@ BEGIN
         ALTER TYPE meeting_status ADD VALUE 'Deleted';
     END IF;
 END $$;
+
+

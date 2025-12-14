@@ -5,11 +5,18 @@ import { Badge } from '@/components/ui';
 import { formatDateReadable, getInitials, calculateRiskSeverity } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
-export default async function RisksPage() {
+interface RisksPageProps {
+  searchParams: Promise<{ filter?: string }>;
+}
+
+export default async function RisksPage({ searchParams }: RisksPageProps) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  const params = await searchParams;
+  const currentFilter = params.filter;
 
   // Get user's projects
   const { data: memberships } = await supabase
@@ -20,7 +27,7 @@ export default async function RisksPage() {
   const projectIds = memberships?.map((m) => m.project_id) || [];
 
   // Get risks
-  const { data: risks } = await supabase
+  const { data: allRisks } = await supabase
     .from('risks')
     .select(
       `
@@ -32,6 +39,39 @@ export default async function RisksPage() {
     )
     .in('project_id', projectIds.length > 0 ? projectIds : ['none'])
     .order('created_at', { ascending: false });
+
+  // Filter risks based on current filter
+  let risks = allRisks;
+  if (currentFilter && allRisks) {
+    switch (currentFilter) {
+      case 'high':
+        risks = allRisks.filter(
+          (r) =>
+            r.status !== 'Closed' &&
+            calculateRiskSeverity(r.probability as any, r.impact as any) === 'High'
+        );
+        break;
+      case 'med':
+        risks = allRisks.filter(
+          (r) =>
+            r.status !== 'Closed' &&
+            calculateRiskSeverity(r.probability as any, r.impact as any) === 'Med'
+        );
+        break;
+      case 'low':
+        risks = allRisks.filter(
+          (r) =>
+            r.status !== 'Closed' &&
+            calculateRiskSeverity(r.probability as any, r.impact as any) === 'Low'
+        );
+        break;
+      case 'closed':
+        risks = allRisks.filter((r) => r.status === 'Closed');
+        break;
+      default:
+        risks = allRisks;
+    }
+  }
 
   const statusVariant: Record<string, 'default' | 'warning' | 'success'> = {
     Open: 'default',
@@ -59,12 +99,20 @@ export default async function RisksPage() {
       </div>
 
       {/* Risk Matrix Summary */}
-      {risks && risks.length > 0 && (
+      {allRisks && allRisks.length > 0 && (
         <div className="grid grid-cols-4 gap-4">
-          <div className="card text-center">
+          <Link
+            href="?filter=high"
+            className={cn(
+              "card text-center cursor-pointer transition-all hover:shadow-md",
+              currentFilter === 'high'
+                ? "ring-2 ring-danger-500 bg-danger-50"
+                : "hover:bg-surface-50"
+            )}
+          >
             <p className="text-3xl font-bold text-danger-600">
               {
-                risks.filter(
+                allRisks.filter(
                   (r) =>
                     r.status !== 'Closed' &&
                     calculateRiskSeverity(r.probability as any, r.impact as any) ===
@@ -73,11 +121,19 @@ export default async function RisksPage() {
               }
             </p>
             <p className="mt-1 text-sm text-surface-500">High Severity</p>
-          </div>
-          <div className="card text-center">
+          </Link>
+          <Link
+            href="?filter=med"
+            className={cn(
+              "card text-center cursor-pointer transition-all hover:shadow-md",
+              currentFilter === 'med'
+                ? "ring-2 ring-warning-500 bg-warning-50"
+                : "hover:bg-surface-50"
+            )}
+          >
             <p className="text-3xl font-bold text-warning-600">
               {
-                risks.filter(
+                allRisks.filter(
                   (r) =>
                     r.status !== 'Closed' &&
                     calculateRiskSeverity(r.probability as any, r.impact as any) ===
@@ -86,11 +142,19 @@ export default async function RisksPage() {
               }
             </p>
             <p className="mt-1 text-sm text-surface-500">Medium Severity</p>
-          </div>
-          <div className="card text-center">
+          </Link>
+          <Link
+            href="?filter=low"
+            className={cn(
+              "card text-center cursor-pointer transition-all hover:shadow-md",
+              currentFilter === 'low'
+                ? "ring-2 ring-surface-500 bg-surface-50"
+                : "hover:bg-surface-50"
+            )}
+          >
             <p className="text-3xl font-bold text-surface-600">
               {
-                risks.filter(
+                allRisks.filter(
                   (r) =>
                     r.status !== 'Closed' &&
                     calculateRiskSeverity(r.probability as any, r.impact as any) ===
@@ -99,13 +163,33 @@ export default async function RisksPage() {
               }
             </p>
             <p className="mt-1 text-sm text-surface-500">Low Severity</p>
-          </div>
-          <div className="card text-center">
+          </Link>
+          <Link
+            href="?filter=closed"
+            className={cn(
+              "card text-center cursor-pointer transition-all hover:shadow-md",
+              currentFilter === 'closed'
+                ? "ring-2 ring-success-500 bg-success-50"
+                : "hover:bg-surface-50"
+            )}
+          >
             <p className="text-3xl font-bold text-success-600">
-              {risks.filter((r) => r.status === 'Closed').length}
+              {allRisks.filter((r) => r.status === 'Closed').length}
             </p>
             <p className="mt-1 text-sm text-surface-500">Closed</p>
-          </div>
+          </Link>
+        </div>
+      )}
+
+      {/* Clear Filter Button */}
+      {currentFilter && (
+        <div className="flex justify-center">
+          <Link
+            href="/risks"
+            className="btn-secondary"
+          >
+            Clear Filter
+          </Link>
         </div>
       )}
 
@@ -201,6 +285,21 @@ export default async function RisksPage() {
               })}
             </tbody>
           </table>
+        </div>
+      ) : allRisks && allRisks.length > 0 ? (
+        <div className="card flex flex-col items-center justify-center py-12 text-center">
+          <AlertTriangle className="mb-4 h-12 w-12 text-surface-300" />
+          <h3 className="text-lg font-medium text-surface-900">
+            No risks match the current filter
+          </h3>
+          <p className="mt-1 text-surface-500">
+            Try clearing the filter or selecting a different category
+          </p>
+          <div className="mt-4">
+            <Link href="/risks" className="btn-secondary">
+              Clear Filter
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="card flex flex-col items-center justify-center py-12 text-center">
