@@ -7,6 +7,9 @@ import Fuse from 'fuse.js';
 import type { Profile, MeetingAttendee } from '@/types/database';
 import type { LLMOwner } from '@/types/llm-contract';
 import type { OwnerResolutionStatus } from '@/types/enums';
+import { loggers } from '@/lib/logger';
+
+const log = loggers.owner;
 
 export interface ResolvedOwner {
   name: string;
@@ -35,6 +38,13 @@ export function resolveOwner(
   context: ResolutionContext
 ): ResolvedOwner {
   const { projectMembers, attendees } = context;
+  
+  log.debug('Starting owner resolution', {
+    ownerName: owner.name,
+    ownerEmail: owner.email,
+    projectMemberCount: projectMembers.length,
+    attendeeCount: attendees.length,
+  });
 
   // Step 1: Direct email match
   if (owner.email) {
@@ -42,6 +52,11 @@ export function resolveOwner(
       (m) => m.email.toLowerCase() === owner.email?.toLowerCase()
     );
     if (directMatch) {
+      log.debug('Step 1: Direct email match found', {
+        ownerName: owner.name,
+        matchedUserId: directMatch.id,
+        matchedEmail: directMatch.email,
+      });
       return {
         name: owner.name,
         email: owner.email,
@@ -51,6 +66,7 @@ export function resolveOwner(
         candidates: [],
       };
     }
+    log.debug('Step 1: No direct email match', { email: owner.email });
   }
 
   // Step 2: Email inference from attendees
@@ -64,6 +80,12 @@ export function resolveOwner(
         (m) => m.email.toLowerCase() === attendeeMatch.email?.toLowerCase()
       );
       if (memberMatch) {
+        log.debug('Step 2: Email inferred from attendee list', {
+          ownerName: owner.name,
+          attendeeName: attendeeMatch.name,
+          inferredEmail: attendeeMatch.email,
+          matchedUserId: memberMatch.id,
+        });
         return {
           name: owner.name,
           email: attendeeMatch.email,
@@ -79,6 +101,7 @@ export function resolveOwner(
         };
       }
     }
+    log.debug('Step 2: No attendee email match found', { ownerName: owner.name });
   }
 
   // Step 3: Conference room heuristic
@@ -92,6 +115,7 @@ export function resolveOwner(
     (keyword) => owner.name.toLowerCase().includes(keyword)
   );
   if (isConferenceRoom) {
+    log.debug('Step 3: Detected conference room', { ownerName: owner.name });
     return {
       name: owner.name,
       email: null,
@@ -110,15 +134,30 @@ export function resolveOwner(
   });
 
   const fuzzyResults = fuse.search(owner.name);
+  log.debug('Step 4: Fuzzy search completed', {
+    ownerName: owner.name,
+    resultCount: fuzzyResults.length,
+    topMatches: fuzzyResults.slice(0, 3).map(r => ({
+      name: r.item.full_name,
+      score: r.score,
+    })),
+  });
 
   if (fuzzyResults.length === 1) {
     const match = fuzzyResults[0];
     const confidence = 1 - (match.score || 0);
+    const status = confidence > 0.7 ? 'needs_confirmation' : 'ambiguous';
+    log.info('Owner resolved via fuzzy match', {
+      ownerName: owner.name,
+      matchedName: match.item.full_name,
+      confidence,
+      status,
+    });
     return {
       name: owner.name,
       email: match.item.email,
       resolvedUserId: match.item.id,
-      resolutionStatus: confidence > 0.7 ? 'needs_confirmation' : 'ambiguous',
+      resolutionStatus: status,
       confidence,
       candidates: [{
         userId: match.item.id,
@@ -138,6 +177,11 @@ export function resolveOwner(
       score: 1 - (r.score || 0),
     }));
 
+    log.warn('Step 5: Ambiguous owner - multiple candidates', {
+      ownerName: owner.name,
+      candidateCount: candidates.length,
+      candidates: candidates.map(c => ({ name: c.name, score: c.score })),
+    });
     return {
       name: owner.name,
       email: owner.email,
@@ -149,6 +193,10 @@ export function resolveOwner(
   }
 
   // Step 6: Fallback - Unknown (can be accepted as placeholder later)
+  log.warn('Step 6: Unknown owner - no matches found', {
+    ownerName: owner.name,
+    ownerEmail: owner.email,
+  });
   return {
     name: owner.name,
     email: owner.email,

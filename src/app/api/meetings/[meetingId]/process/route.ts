@@ -26,10 +26,15 @@ export async function POST(
     }
 
     // Update status to Processing
-    await supabase
+    const { error: statusError } = await supabase
       .from('meetings')
       .update({ status: 'Processing' })
       .eq('id', meetingId);
+
+    if (statusError) {
+      console.error('Failed to update meeting status to Processing:', statusError);
+      return NextResponse.json({ error: 'Failed to update meeting status' }, { status: 500 });
+    }
 
     // Get project members for owner resolution
     const { data: members } = await supabase

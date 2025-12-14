@@ -5,6 +5,9 @@
 
 import { GoogleGenerativeAI, GenerationConfig } from '@google/generative-ai';
 import OpenAI from 'openai';
+import { loggers } from '@/lib/logger';
+
+const log = loggers.llm;
 
 export type LLMModel = 'gemini-3-pro-preview' | 'gpt-5.2' | 'gemini-2.5-flash';
 
@@ -69,10 +72,27 @@ export class LLMClient {
     systemPrompt?: string
   ): Promise<LLMResponse> {
     const startTime = Date.now();
+    const promptLength = prompt.length;
+    const systemPromptLength = systemPrompt?.length || 0;
+    const totalInputChars = promptLength + systemPromptLength;
+    
+    log.info('LLM generation request', {
+      promptLength,
+      systemPromptLength,
+      totalInputChars,
+      hasGemini: !!this.gemini,
+      hasOpenAI: !!this.openai,
+    });
 
     // Try Gemini first
     try {
       if (this.gemini) {
+        log.debug('Attempting Gemini generation', {
+          model: 'gemini-3-pro-preview',
+          maxOutputTokens: LLM_SETTINGS.gemini.maxOutputTokens,
+          temperature: LLM_SETTINGS.gemini.temperature,
+        });
+        
         const generationConfig: GenerationConfig = {
           maxOutputTokens: LLM_SETTINGS.gemini.maxOutputTokens,
           temperature: LLM_SETTINGS.gemini.temperature,
@@ -96,29 +116,41 @@ export class LLMClient {
         });
         const response = result.response;
         const text = response.text();
+        const latencyMs = Date.now() - startTime;
+
+        log.info('Gemini generation successful', {
+          model: 'gemini-3-pro-preview',
+          inputChars: totalInputChars,
+          outputChars: text.length,
+          latencyMs,
+        });
 
         return {
           content: text,
           model: 'gemini-3-pro-preview',
           isFallback: false,
-          latencyMs: Date.now() - startTime,
+          latencyMs,
         };
       }
     } catch (error) {
-      console.error('Gemini failed, trying fallback:', error);
-      // Log more specific error information
-      if (error instanceof Error) {
-        console.error('Gemini error details:', {
-          message: error.message,
-          name: error.name,
-          stack: error.stack
-        });
-      }
+      const latencyMs = Date.now() - startTime;
+      log.warn('Gemini generation failed, attempting fallback', {
+        model: 'gemini-3-pro-preview',
+        latencyMs,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorName: error instanceof Error ? error.name : undefined,
+      });
     }
 
     // Fallback to GPT-5.2
     try {
       if (this.openai) {
+        log.debug('Attempting OpenAI fallback', {
+          model: 'gpt-5.2',
+          maxTokens: LLM_SETTINGS.openai.maxTokens,
+          temperature: LLM_SETTINGS.openai.temperature,
+        });
+        
         const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
         if (systemPrompt) {
           messages.push({ role: 'system', content: systemPrompt });
@@ -133,26 +165,36 @@ export class LLMClient {
           response_format: { type: 'json_object' }, // Ensures valid JSON output
         });
 
+        const content = response.choices[0]?.message?.content || '';
+        const latencyMs = Date.now() - startTime;
+        
+        log.info('OpenAI fallback successful', {
+          model: 'gpt-5.2',
+          inputChars: totalInputChars,
+          outputChars: content.length,
+          latencyMs,
+          isFallback: true,
+          usage: response.usage,
+        });
+
         return {
-          content: response.choices[0]?.message?.content || '',
+          content,
           model: 'gpt-5.2',
           isFallback: true,
-          latencyMs: Date.now() - startTime,
+          latencyMs,
         };
       }
     } catch (error) {
-      console.error('GPT-5.2 fallback failed:', error);
-      // Log more specific error information
-      if (error instanceof Error) {
-        console.error('OpenAI error details:', {
-          message: error.message,
-          name: error.name,
-          stack: error.stack
-        });
-      }
+      const latencyMs = Date.now() - startTime;
+      log.error('All LLM providers failed', {
+        latencyMs,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorName: error instanceof Error ? error.name : undefined,
+      });
       throw new Error(`Both Gemini and OpenAI failed. OpenAI error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
+    log.error('No LLM providers configured');
     throw new Error('No LLM providers configured');
   }
 
@@ -163,18 +205,28 @@ export class LLMClient {
     prompt: string,
     systemPrompt?: string
   ): Promise<{ data: T } & LLMResponse> {
+    log.debug('Generating JSON response');
     const response = await this.generate(prompt, systemPrompt);
 
     // Extract JSON from response
     const jsonMatch = response.content.match(/```(?:json)?\s*([\s\S]*?)```/);
     const jsonString = jsonMatch ? jsonMatch[1].trim() : response.content.trim();
+    const wasWrapped = !!jsonMatch;
 
     try {
       const data = JSON.parse(jsonString) as T;
+      log.debug('JSON parsed successfully', {
+        wasWrapped,
+        jsonLength: jsonString.length,
+      });
       return { ...response, data };
     } catch (parseError) {
-      console.error('JSON parsing failed:', parseError);
-      console.error('Raw response content:', response.content.substring(0, 500));
+      log.error('JSON parsing failed', {
+        wasWrapped,
+        jsonLength: jsonString.length,
+        rawContentPreview: response.content.substring(0, 200),
+        parseError: parseError instanceof Error ? parseError.message : 'Unknown error',
+      });
       throw new Error(`Failed to parse JSON from LLM response: ${parseError instanceof Error ? parseError.message : 'Unknown parse error'}`);
     }
   }
@@ -187,6 +239,11 @@ export class LLMClient {
     schema: string
   ): Promise<LLMResponse> {
     const startTime = Date.now();
+    
+    log.info('Attempting JSON repair', {
+      invalidJsonLength: invalidJson.length,
+      schemaLength: schema.length,
+    });
 
     const prompt = `Fix this invalid JSON to match the schema. Return ONLY valid JSON, no explanation.
 
@@ -208,21 +265,39 @@ Fixed JSON:`;
         model: 'gemini-2.5-flash',
         generationConfig,
       });
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
+      
+      try {
+        const result = await model.generateContent(prompt);
+        const text = result.response.text();
 
-      // Extract JSON
-      const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-      const content = jsonMatch ? jsonMatch[1].trim() : text.trim();
+        // Extract JSON
+        const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+        const content = jsonMatch ? jsonMatch[1].trim() : text.trim();
+        const latencyMs = Date.now() - startTime;
 
-      return {
-        content,
-        model: 'gemini-2.5-flash',
-        isFallback: false,
-        latencyMs: Date.now() - startTime,
-      };
+        log.info('JSON repair completed', {
+          inputLength: invalidJson.length,
+          outputLength: content.length,
+          latencyMs,
+        });
+
+        return {
+          content,
+          model: 'gemini-2.5-flash',
+          isFallback: false,
+          latencyMs,
+        };
+      } catch (error) {
+        const latencyMs = Date.now() - startTime;
+        log.error('JSON repair failed', {
+          latencyMs,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        throw error;
+      }
     }
 
+    log.error('JSON repair unavailable - Gemini Flash not configured');
     throw new Error('Gemini 2.5 Flash not configured for JSON repair functionality');
   }
 }

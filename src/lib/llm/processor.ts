@@ -23,6 +23,9 @@ import type {
 } from '@/types/database';
 import type { MeetingCategory } from '@/types/enums';
 import { generateId } from '@/lib/utils';
+import { loggers } from '@/lib/logger';
+
+const log = loggers.llm;
 
 export interface ProcessingResult {
   success: boolean;
@@ -48,11 +51,27 @@ interface ProcessingContext {
 export async function processMeeting(
   context: ProcessingContext
 ): Promise<ProcessingResult> {
+  const startTime = Date.now();
   const llm = getLLMClient();
   const { meeting, projectMembers, openActionItems, openDecisions, openRisks } =
     context;
 
+  log.info('Starting meeting processing', {
+    meetingId: meeting.id,
+    category: meeting.category,
+    transcriptLength: meeting.transcript_text?.length || 0,
+    projectMemberCount: projectMembers.length,
+    openActionItemCount: openActionItems.length,
+    openDecisionCount: openDecisions.length,
+    openRiskCount: openRisks.length,
+  });
+
   if (!meeting.transcript_text || !meeting.category) {
+    log.warn('Meeting processing aborted - missing required data', {
+      meetingId: meeting.id,
+      hasTranscript: !!meeting.transcript_text,
+      hasCategory: !!meeting.category,
+    });
     return {
       success: false,
       error: 'Missing transcript or category',
@@ -71,6 +90,11 @@ export async function processMeeting(
     openRisks,
   });
 
+  log.debug('Built processing prompt', {
+    meetingId: meeting.id,
+    promptLength: prompt.length,
+  });
+
   try {
     // Generate with primary model (fallback handled internally)
     const response = await llm.generateJSON<LLMOutputContract>(prompt);
@@ -80,7 +104,12 @@ export async function processMeeting(
 
     if (!validation.success) {
       // Try to repair with utility model
-      console.log('Attempting JSON repair...');
+      log.warn('LLM output validation failed, attempting repair', {
+        meetingId: meeting.id,
+        issueCount: validation.errors?.issues.length || 0,
+        issues: validation.errors?.issues.slice(0, 5).map((i) => i.message),
+      });
+      
       const schemaStr = JSON.stringify(validation.errors?.issues);
       const repairResponse = await llm.repairJSON(
         JSON.stringify(response.data),
@@ -92,6 +121,10 @@ export async function processMeeting(
         const revalidation = validateLLMOutput(repairedData);
 
         if (!revalidation.success) {
+          log.error('JSON repair failed - validation still failing', {
+            meetingId: meeting.id,
+            issues: revalidation.errors?.issues.map((i) => i.message),
+          });
           return {
             success: false,
             error: `JSON validation failed after repair: ${revalidation.errors?.issues.map((i) => i.message).join(', ')}`,
@@ -101,8 +134,13 @@ export async function processMeeting(
           };
         }
 
+        log.info('JSON repair successful', { meetingId: meeting.id });
         response.data = revalidation.data!;
-      } catch {
+      } catch (parseError) {
+        log.error('JSON repair parsing failed', {
+          meetingId: meeting.id,
+          error: parseError instanceof Error ? parseError.message : 'Unknown error',
+        });
         return {
           success: false,
           error: 'Failed to repair invalid JSON output',
@@ -119,6 +157,11 @@ export async function processMeeting(
       meeting.category
     );
     if (!fishboneValidation.valid) {
+      log.error('Fishbone validation failed', {
+        meetingId: meeting.id,
+        category: meeting.category,
+        message: fishboneValidation.message,
+      });
       return {
         success: false,
         error: fishboneValidation.message,
@@ -135,6 +178,20 @@ export async function processMeeting(
       (meeting.attendees as any[]) || []
     );
 
+    const totalLatencyMs = Date.now() - startTime;
+    log.info('Meeting processing completed successfully', {
+      meetingId: meeting.id,
+      model: response.model,
+      isFallback: response.isFallback,
+      llmLatencyMs: response.latencyMs,
+      totalLatencyMs,
+      extractedItems: {
+        actionItems: proposedItems.action_items.length,
+        decisions: proposedItems.decisions.length,
+        risks: proposedItems.risks.length,
+      },
+    });
+
     return {
       success: true,
       output: response.data,
@@ -144,7 +201,13 @@ export async function processMeeting(
       latencyMs: response.latencyMs,
     };
   } catch (error) {
-    console.error('Meeting processing failed:', error);
+    const totalLatencyMs = Date.now() - startTime;
+    log.error('Meeting processing failed', {
+      meetingId: meeting.id,
+      totalLatencyMs,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      errorStack: error instanceof Error ? error.stack?.substring(0, 500) : undefined,
+    });
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',

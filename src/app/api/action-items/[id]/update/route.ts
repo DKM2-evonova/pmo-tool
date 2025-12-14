@@ -10,6 +10,14 @@ interface UpdateRequest {
   due_date?: string;
 }
 
+interface StatusUpdate {
+  id: string;
+  content: string;
+  created_at: string;
+  created_by_user_id: string;
+  created_by_name: string;
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -28,11 +36,40 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const serviceSupabase = createServiceClient();
+
+    // Get the action item to check project access
+    const { data: existingItem } = await serviceSupabase
+      .from('action_items')
+      .select('project_id')
+      .eq('id', id)
+      .single();
+
+    if (!existingItem) {
+      return NextResponse.json({ error: 'Action item not found' }, { status: 404 });
+    }
+
+    // Verify user has access to the project (either as member or admin)
+    const { data: membership } = await supabase
+      .from('project_members')
+      .select('project_id')
+      .eq('project_id', existingItem.project_id)
+      .eq('user_id', user.id)
+      .single();
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('global_role')
+      .eq('id', user.id)
+      .single();
+
+    if (!membership && profile?.global_role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     // Get the update data
     const body: UpdateRequest = await request.json();
     const { content, title, description, status, owner_user_id, due_date } = body;
-
-    const serviceSupabase = createServiceClient();
 
     // Handle status update (content provided)
     if (content) {
@@ -63,7 +100,7 @@ export async function POST(
 
       // Create the update
       const update = {
-        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        id: Date.now().toString() + Math.random().toString(36).slice(2, 11),
         content: content.trim(),
         created_at: new Date().toISOString(),
         created_by_user_id: user.id,
@@ -71,12 +108,12 @@ export async function POST(
       };
 
       // Update the action item
-      let currentUpdates: any[] = [];
+      let currentUpdates: StatusUpdate[] = [];
       try {
         const parsedUpdates = actionItem.updates ? JSON.parse(actionItem.updates) : [];
         currentUpdates = Array.isArray(parsedUpdates) ? parsedUpdates : [];
-      } catch (error) {
-        console.error('Failed to parse action item updates:', error);
+      } catch (parseError) {
+        console.error('Failed to parse action item updates:', parseError);
         currentUpdates = [];
       }
       const updatedUpdates = [...currentUpdates, update];

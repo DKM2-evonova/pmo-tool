@@ -6,6 +6,14 @@ interface RiskPageProps {
   params: Promise<{ id: string }>;
 }
 
+interface StatusUpdate {
+  id: string;
+  content: string;
+  created_at: string;
+  created_by_user_id: string;
+  created_by_name: string;
+}
+
 export default async function RiskPage({ params }: RiskPageProps) {
   const resolvedParams = await params;
   const { id } = resolvedParams;
@@ -33,38 +41,31 @@ export default async function RiskPage({ params }: RiskPageProps) {
     notFound();
   }
 
-  // Simplified related data fetching
-  let projectMembers: Array<{ id: string; full_name: string; email: string }> = [];
-
-  // Get project members
+  // Get project members with a single query using join
   const { data: members } = await serviceSupabase
     .from('project_members')
-    .select('user_id')
+    .select(`
+      user_id,
+      profile:profiles!project_members_user_id_fkey(id, full_name, email)
+    `)
     .eq('project_id', risk.project_id);
 
-  if (members) {
-    for (const m of members) {
-      const { data: profile } = await serviceSupabase
-        .from('profiles')
-        .select('id, full_name, email')
-        .eq('id', m.user_id)
-        .single();
-
-      if (profile) {
-        projectMembers.push({
-          id: profile.id,
-          full_name: profile.full_name || '',
-          email: profile.email,
-        });
-      }
-    }
-  }
+  const projectMembers: Array<{ id: string; full_name: string; email: string }> = 
+    members
+      ?.filter((m): m is typeof m & { profile: { id: string; full_name: string | null; email: string } } => 
+        m.profile !== null
+      )
+      .map((m) => ({
+        id: m.profile.id,
+        full_name: m.profile.full_name || '',
+        email: m.profile.email,
+      })) || [];
 
   // Parse updates
-  let updatesArray: any[] = [];
+  let updatesArray: StatusUpdate[] = [];
   try {
-    updatesArray = risk.updates ? JSON.parse(risk.updates as string) : [];
-    if (!Array.isArray(updatesArray)) updatesArray = [];
+    const parsed = risk.updates ? JSON.parse(risk.updates as string) : [];
+    updatesArray = Array.isArray(parsed) ? parsed : [];
   } catch (e) {
     console.warn('Failed to parse updates JSON:', e);
     updatesArray = [];

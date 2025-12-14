@@ -1,20 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { generateEmbedding } from '@/lib/embeddings/client';
+import { loggers } from '@/lib/logger';
 import type {
   ProposedActionItem,
   ProposedDecision,
   ProposedRisk,
 } from '@/types/database';
 
+const log = loggers.publish;
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ meetingId: string }> }
 ) {
+  const startTime = Date.now();
+  
   try {
     const supabase = await createClient();
     const serviceClient = createServiceClient();
     const { meetingId } = await params;
+    
+    log.info('Starting meeting publish', { meetingId });
 
     const {
       data: { user },
@@ -83,15 +90,42 @@ export async function POST(
       risks: ProposedRisk[];
     };
 
+    const acceptedActionItems = proposedItems.action_items.filter((ai) => ai.accepted);
+    const acceptedDecisions = proposedItems.decisions.filter((d) => d.accepted);
+    const acceptedRisks = proposedItems.risks.filter((r) => r.accepted);
+    
+    log.info('Processing proposed items', {
+      meetingId,
+      totalActionItems: proposedItems.action_items.length,
+      acceptedActionItems: acceptedActionItems.length,
+      totalDecisions: proposedItems.decisions.length,
+      acceptedDecisions: acceptedDecisions.length,
+      totalRisks: proposedItems.risks.length,
+      acceptedRisks: acceptedRisks.length,
+    });
+
+    let actionItemsCreated = 0;
+    let actionItemsUpdated = 0;
+    let actionItemsClosed = 0;
+    let decisionsCreated = 0;
+    let risksCreated = 0;
+    let risksClosed = 0;
+    let embeddingFailures = 0;
+
     // Process accepted action items
-    for (const item of proposedItems.action_items.filter((ai) => ai.accepted)) {
+    log.debug('Processing action items', { count: acceptedActionItems.length });
+    for (const item of acceptedActionItems) {
       const text = `${item.title}. ${item.description}`;
       let embedding: number[] | null = null;
 
       try {
         embedding = await generateEmbedding(text);
       } catch (e) {
-        console.error('Failed to generate embedding:', e);
+        embeddingFailures++;
+        log.warn('Embedding generation failed for action item', {
+          title: item.title,
+          error: e instanceof Error ? e.message : 'Unknown error',
+        });
       }
 
       if (item.operation === 'create') {
@@ -114,6 +148,7 @@ export async function POST(
           .single();
 
         if (error) throw error;
+        actionItemsCreated++;
 
         // Create evidence records
         for (const evidence of item.evidence) {
@@ -163,6 +198,7 @@ export async function POST(
           .single();
 
         if (error) throw error;
+        actionItemsUpdated++;
 
         // Create evidence records
         for (const evidence of item.evidence) {
@@ -203,6 +239,7 @@ export async function POST(
           .single();
 
         if (error) throw error;
+        actionItemsClosed++;
 
         // Audit log
         await serviceClient.rpc('create_audit_log', {
@@ -218,14 +255,19 @@ export async function POST(
     }
 
     // Process accepted decisions
-    for (const item of proposedItems.decisions.filter((d) => d.accepted)) {
+    log.debug('Processing decisions', { count: acceptedDecisions.length });
+    for (const item of acceptedDecisions) {
       const text = `${item.title}. ${item.rationale}`;
       let embedding: number[] | null = null;
 
       try {
         embedding = await generateEmbedding(text);
       } catch (e) {
-        console.error('Failed to generate embedding:', e);
+        embeddingFailures++;
+        log.warn('Embedding generation failed for decision', {
+          title: item.title,
+          error: e instanceof Error ? e.message : 'Unknown error',
+        });
       }
 
       if (item.operation === 'create') {
@@ -247,6 +289,7 @@ export async function POST(
           .single();
 
         if (error) throw error;
+        decisionsCreated++;
 
         // Create evidence records
         for (const evidence of item.evidence) {
@@ -274,14 +317,19 @@ export async function POST(
     }
 
     // Process accepted risks
-    for (const item of proposedItems.risks.filter((r) => r.accepted)) {
+    log.debug('Processing risks', { count: acceptedRisks.length });
+    for (const item of acceptedRisks) {
       const text = `${item.title}. ${item.description}`;
       let embedding: number[] | null = null;
 
       try {
         embedding = await generateEmbedding(text);
       } catch (e) {
-        console.error('Failed to generate embedding:', e);
+        embeddingFailures++;
+        log.warn('Embedding generation failed for risk', {
+          title: item.title,
+          error: e instanceof Error ? e.message : 'Unknown error',
+        });
       }
 
       if (item.operation === 'create') {
@@ -305,6 +353,7 @@ export async function POST(
           .single();
 
         if (error) throw error;
+        risksCreated++;
 
         // Create evidence records
         for (const evidence of item.evidence) {
@@ -343,6 +392,7 @@ export async function POST(
           .single();
 
         if (error) throw error;
+        risksClosed++;
 
         // Audit log
         await serviceClient.rpc('create_audit_log', {
@@ -369,9 +419,34 @@ export async function POST(
       p_user_id: user.id,
     });
 
+    const durationMs = Date.now() - startTime;
+    log.info('Meeting published successfully', {
+      meetingId,
+      projectId: meeting.project_id,
+      durationMs,
+      actionItems: {
+        created: actionItemsCreated,
+        updated: actionItemsUpdated,
+        closed: actionItemsClosed,
+      },
+      decisions: {
+        created: decisionsCreated,
+      },
+      risks: {
+        created: risksCreated,
+        closed: risksClosed,
+      },
+      embeddingFailures,
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Publish error:', error);
+    const durationMs = Date.now() - startTime;
+    log.error('Meeting publish failed', {
+      durationMs,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      errorStack: error instanceof Error ? error.stack?.substring(0, 500) : undefined,
+    });
     return NextResponse.json(
       { error: 'Publish failed: ' + (error as Error).message },
       { status: 500 }

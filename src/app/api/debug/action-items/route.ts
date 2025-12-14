@@ -15,6 +15,21 @@ export async function GET(request: Request) {
     // Check authentication using regular client
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check if user is admin - this debug route exposes sensitive data
+    const { data: adminCheck } = await supabase
+      .from('profiles')
+      .select('global_role')
+      .eq('id', user.id)
+      .single();
+
+    if (adminCheck?.global_role !== 'admin') {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    }
+
     console.log('Debug API auth check:', {
       user: user?.id || null,
       email: user?.email || null,

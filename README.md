@@ -207,6 +207,36 @@ gcloud builds submit --config=cloudbuild.yaml \
 - Use Tailwind CSS for styling
 - Run `npm run format` before committing
 
+### Logging
+
+The application uses a structured logging utility (`src/lib/logger.ts`) for consistent debugging and monitoring:
+
+```typescript
+import { logger, loggers, createLogger } from '@/lib/logger';
+
+// Use pre-configured scoped loggers
+loggers.llm.info('LLM request completed', { model: 'gemini', latencyMs: 1500 });
+loggers.embedding.debug('Embedding generated', { textLength: 500 });
+loggers.publish.error('Publish failed', { meetingId, error: err.message });
+
+// Or create custom scoped loggers
+const log = createLogger('my-feature');
+log.info('Operation completed', { context: 'value' });
+
+// Timed operations
+await log.timed('Processing data', async () => {
+  // ... async operation
+}, { itemCount: 100 });
+```
+
+**Available scoped loggers:** `llm`, `embedding`, `owner`, `publish`, `api`, `auth`, `file`
+
+**Log levels:** `debug`, `info`, `warn`, `error`
+
+**Environment configuration:**
+- Set `LOG_LEVEL=debug` for verbose output in development
+- Defaults to `info` in production, `debug` in development
+
 ### Database Migrations
 
 The database schema is managed through Supabase migrations in `supabase/migrations/`. To apply migrations:
@@ -257,26 +287,6 @@ Key directories:
 - All routes under `(dashboard)` require authentication
 - Row-Level Security (RLS) enforces project-scoped access
 
-## Meeting Categories
-
-| Category | Outputs |
-|----------|---------|
-| **Project** | Recap, Action Items, Risks/Issues |
-| **Governance** | Recap, Decisions (with outcomes), Strategic Risks |
-| **Discovery** | Detailed Recap, Action Items, Decisions |
-| **Alignment** | Recap, Tone Analysis |
-| **Remediation** | Detailed Recap, Fishbone Diagram, RAID |
-
-## Roles and Permissions
-
-| Capability | Admin | Consultant | Program Manager |
-|------------|-------|------------|-----------------|
-| Create/delete projects | ✓ | ✗ | ✗ |
-| Manage members/RBAC | ✓ | ✗ | ✗ |
-| Process meetings | ✓ | ✓ | ✓ |
-| Review & publish | ✓ | ✓ | ✓ |
-| View analytics | ✓ | ✗ | ✗ |
-
 ## Key Features Explained
 
 ### Review Workflow
@@ -326,6 +336,24 @@ The system pre-fetches all open action items, risks, and decisions for the selec
 - Status tracking with update history and comments
 - Visual dashboard showing risk distribution by severity
 - Filtering by severity (High/Medium/Low) and status
+
+## Security
+
+### Authentication & Authorization
+
+- **Supabase Auth**: All API routes require authenticated users
+- **Row-Level Security (RLS)**: Database enforces project-scoped access automatically
+- **Project Membership Verification**: Update operations verify user has access to the project
+- **Admin-Only Routes**: Debug and admin routes require `global_role = 'admin'`
+- **Middleware Protection**: Auth errors are handled gracefully with redirect to login
+
+### API Security
+
+- All update routes (`/api/action-items/[id]/update`, `/api/risks/[id]/update`) verify:
+  1. User is authenticated
+  2. User is either a project member OR has admin role
+- Debug routes require admin privileges to prevent data exposure
+- Service client (RLS bypass) is only used after authorization checks
 
 ## Troubleshooting
 

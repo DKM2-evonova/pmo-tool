@@ -50,6 +50,14 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith(route)
   );
 
+  // Handle auth errors on protected routes
+  if (authError && !isPublicRoute) {
+    console.error('Auth error:', authError.message);
+    const url = request.nextUrl.clone();
+    url.pathname = '/login';
+    return NextResponse.redirect(url);
+  }
+
   if (!user && !isPublicRoute) {
     // No user, redirect to login
     const url = request.nextUrl.clone();
