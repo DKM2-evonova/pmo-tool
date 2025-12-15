@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import { Settings, Shield, Bell, Database } from 'lucide-react';
+import { Settings, Shield, Bell, Database, AlertTriangle } from 'lucide-react';
+import { DatabaseManagement } from '@/components/admin/database-management';
 
 export default async function AdminSettingsPage() {
   const supabase = await createClient();
@@ -177,6 +178,46 @@ export default async function AdminSettingsPage() {
         Settings configuration requires environment variable changes.
         <br />
         See deployment documentation for details.
+      </div>
+
+      {/* Database Management - Testing Only */}
+      <div className="card border-2 border-dashed border-warning-300 bg-warning-50/50">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-danger-100">
+            <Database className="h-5 w-5 text-danger-600" />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-lg font-semibold text-surface-900">
+              Database Management
+            </h2>
+            <p className="text-sm text-surface-500">
+              Clear all meeting data from the database
+            </p>
+          </div>
+        </div>
+
+        {/* Testing Notice Banner */}
+        <div className="mb-4 flex items-start gap-3 rounded-lg bg-warning-100 p-4">
+          <AlertTriangle className="h-5 w-5 flex-shrink-0 text-warning-600" />
+          <div className="text-sm text-warning-800">
+            <p className="font-semibold">Testing Feature Only</p>
+            <p className="mt-1">
+              This feature is only available while the application is being tested.
+              It will be removed or restricted in production environments.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border border-surface-200 bg-white p-4">
+          <div>
+            <p className="font-medium text-surface-900">Clear All Data</p>
+            <p className="text-sm text-surface-500">
+              Remove all meetings, action items, decisions, risks, and associated records.
+              Projects and users will be preserved.
+            </p>
+          </div>
+          <DatabaseManagement />
+        </div>
       </div>
     </div>
   );
