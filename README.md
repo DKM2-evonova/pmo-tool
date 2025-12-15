@@ -15,13 +15,14 @@ The PMO Tool is an automation layer that sits on top of an organization's existi
 - **Meeting Processing**: Upload transcripts (VTT, TXT, DOCX, PDF) or connect to Google Meet API
 - **AI Extraction**: Uses Gemini 3 Pro Preview and GPT-4o to extract structured data with evidence citations
 - **Context-Aware Updates**: Favors updating existing items over creating duplicates using semantic matching
+- **Smart Context Filtering**: Uses vector similarity to filter relevant open items, reducing token usage for large projects
 - **5 Meeting Categories**: Project, Governance, Discovery, Alignment, Remediation
 - **Review Workflow**: Staging area for human validation with edit and reject capabilities before publishing
 - **Owner Resolution**: 6-step pipeline for resolving owner identity from transcripts
 - **Duplicate Detection**: Semantic matching using pgvector embeddings (threshold: 0.85)
 - **Decision Log**: Track key decisions with outcomes and decision makers
 - **Risk Register**: Risk/issue management with probability/impact assessment and severity matrix
-- **Kanban Board**: Visual task management for action items
+- **Kanban Board**: Visual task management for action items with optimistic UI updates
 - **Export**: CSV/DOCX/PDF export for action items, decisions, and risks
 - **RBAC**: Role-based access control with project scoping
 - **Evidence Trail**: All extracted items include transcript evidence for auditability
@@ -121,7 +122,7 @@ src/
 ├── lib/                    # Utility functions
 │   ├── embeddings/         # Embedding generation
 │   ├── export/             # Export utilities
-│   ├── llm/                # LLM client and prompts
+│   ├── llm/                # LLM client, prompts, and context filtering
 │   ├── supabase/           # Supabase clients
 │   └── utils.ts            # Helper functions
 └── types/                  # TypeScript types
@@ -304,7 +305,15 @@ The PMO Tool includes a comprehensive review system that allows users to validat
 
 ### Context-Aware Processing
 
-The system pre-fetches all open action items, risks, and decisions for the selected project before LLM processing. This context is injected into the LLM prompt to favor UPDATE/CLOSE operations over CREATE, reducing duplicates.
+The system uses intelligent context filtering to optimize LLM processing:
+
+- **Semantic Relevance Filtering**: When projects have many open items (>25), the system uses vector embeddings to filter context to only semantically relevant items, reducing token usage and improving LLM focus
+- **Similarity Threshold**: Uses a 0.3 similarity threshold (broader matches) to include contextually relevant items
+- **Recency Fallback**: Always includes items updated within the last 14 days, regardless of similarity
+- **Cost Optimization**: Samples the first 8,000 characters of transcripts for embedding generation
+- **Passthrough Mode**: Projects with ≤25 total open items bypass filtering and include all items
+
+This filtered context is injected into the LLM prompt to favor UPDATE/CLOSE operations over CREATE, reducing duplicates while maintaining efficiency.
 
 ### Owner Resolution Pipeline
 

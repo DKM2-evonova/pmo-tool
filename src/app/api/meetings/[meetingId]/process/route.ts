@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { processMeeting } from '@/lib/llm/processor';
+import { getRelevantContext } from '@/lib/llm/relevant-context';
 
 export async function POST(
   request: NextRequest,
@@ -45,31 +46,19 @@ export async function POST(
     const projectMembers =
       members?.map((m) => m.profile as any).filter(Boolean) || [];
 
-    // Get open items for context injection
-    const [actionItems, decisions, risks] = await Promise.all([
-      supabase
-        .from('action_items')
-        .select('*')
-        .eq('project_id', meeting.project_id)
-        .neq('status', 'Closed'),
-      supabase
-        .from('decisions')
-        .select('*')
-        .eq('project_id', meeting.project_id),
-      supabase
-        .from('risks')
-        .select('*')
-        .eq('project_id', meeting.project_id)
-        .neq('status', 'Closed'),
-    ]);
+    // Get relevant open items for context injection (filtered by semantic similarity)
+    const relevantContext = await getRelevantContext(
+      meeting.project_id,
+      meeting.transcript_text || ''
+    );
 
     // Process the meeting
     const result = await processMeeting({
       meeting,
       projectMembers,
-      openActionItems: actionItems.data || [],
-      openDecisions: decisions.data || [],
-      openRisks: risks.data || [],
+      openActionItems: relevantContext.actionItems,
+      openDecisions: relevantContext.decisions,
+      openRisks: relevantContext.risks,
     });
 
     // Log LLM metrics

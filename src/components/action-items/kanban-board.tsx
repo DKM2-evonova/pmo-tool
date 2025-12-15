@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { formatDateReadable, isOverdue, getInitials, cn } from '@/lib/utils';
@@ -21,8 +21,15 @@ const columns: { id: EntityStatus; title: string; color: string }[] = [
 export function KanbanBoard({ actionItems }: KanbanBoardProps) {
   const router = useRouter();
   const supabase = createClient();
+  // Local state for optimistic updates
+  const [items, setItems] = useState<ActionItemWithOwner[]>(actionItems);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<EntityStatus | null>(null);
+
+  // Sync with server data when props change
+  useEffect(() => {
+    setItems(actionItems);
+  }, [actionItems]);
 
   const handleDragStart = (e: React.DragEvent, itemId: string) => {
     setDraggingId(itemId);
@@ -46,8 +53,17 @@ export function KanbanBoard({ actionItems }: KanbanBoardProps) {
 
     if (!itemId) return;
 
-    const item = actionItems.find((ai) => ai.id === itemId);
+    const item = items.find((ai) => ai.id === itemId);
     if (!item || item.status === newStatus) return;
+
+    const previousStatus = item.status;
+
+    // Optimistic update: immediately update local state
+    setItems((prev) =>
+      prev.map((ai) =>
+        ai.id === itemId ? { ...ai, status: newStatus } : ai
+      )
+    );
 
     try {
       const { error } = await supabase
@@ -56,15 +72,21 @@ export function KanbanBoard({ actionItems }: KanbanBoardProps) {
         .eq('id', itemId);
 
       if (error) throw error;
-      router.refresh();
+      // No router.refresh() needed - local state is already updated
     } catch (error) {
       console.error('Failed to update status:', error);
+      // Revert to previous state on failure
+      setItems((prev) =>
+        prev.map((ai) =>
+          ai.id === itemId ? { ...ai, status: previousStatus } : ai
+        )
+      );
       alert('Failed to update status');
     }
   };
 
   const getColumnItems = (status: EntityStatus) =>
-    actionItems.filter((item) => item.status === status);
+    items.filter((item) => item.status === status);
 
   return (
     <div className="grid grid-cols-3 gap-4">
