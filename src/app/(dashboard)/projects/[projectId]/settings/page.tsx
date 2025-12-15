@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { ProjectForm } from '@/components/projects/project-form';
-import { MemberManagement } from '@/components/projects/member-management';
+import { UnifiedTeamGrid } from '@/components/projects/unified-team-grid';
 
 interface ProjectSettingsPageProps {
   params: Promise<{ projectId: string }>;
@@ -17,7 +17,7 @@ export default async function ProjectSettingsPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Check if user is admin
+  // Check user's role
   const { data: profile } = await supabase
     .from('profiles')
     .select('global_role')
@@ -25,6 +25,18 @@ export default async function ProjectSettingsPage({
     .single();
 
   const isAdmin = profile?.global_role === 'admin';
+  const isProgramManager = profile?.global_role === 'program_manager';
+
+  // Check if user is a member of this project
+  const { data: membership } = await supabase
+    .from('project_members')
+    .select('project_id')
+    .eq('project_id', projectId)
+    .eq('user_id', user?.id)
+    .single();
+
+  // Can manage team if admin OR (program manager AND member)
+  const canManageTeam = isAdmin || (isProgramManager && !!membership);
 
   // Get project details
   const { data: project, error } = await supabase
@@ -49,8 +61,15 @@ export default async function ProjectSettingsPage({
     )
     .eq('project_id', projectId);
 
-  // Get all users for adding new members (admin only)
-  const { data: allUsers } = isAdmin
+  // Get project contacts
+  const { data: contacts } = await supabase
+    .from('project_contacts')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('name', { ascending: true });
+
+  // Get all users for adding new members (if user can manage)
+  const { data: allUsers } = canManageTeam
     ? await supabase.from('profiles').select('id, full_name, email, avatar_url')
     : { data: null };
 
@@ -86,19 +105,22 @@ export default async function ProjectSettingsPage({
         )}
       </div>
 
-      {/* Team Members */}
+      {/* Team */}
       <div>
         <h2 className="mb-4 text-lg font-semibold text-surface-900">
-          Team Members
+          Project Team
         </h2>
-        <MemberManagement
+        <p className="mb-4 text-sm text-surface-500">
+          Manage team members (users with accounts) and contacts (people recognized in meeting uploads).
+        </p>
+        <UnifiedTeamGrid
           projectId={projectId}
           members={members || []}
+          contacts={contacts || []}
           allUsers={allUsers || []}
-          isAdmin={isAdmin}
+          canManage={canManageTeam}
         />
       </div>
     </div>
   );
 }
-

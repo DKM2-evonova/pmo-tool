@@ -16,6 +16,7 @@ import type {
   Decision,
   Risk,
   Profile,
+  ProjectContact,
   ProposedActionItem,
   ProposedDecision,
   ProposedRisk,
@@ -40,6 +41,7 @@ export interface ProcessingResult {
 interface ProcessingContext {
   meeting: Meeting;
   projectMembers: Profile[];
+  projectContacts: ProjectContact[];
   openActionItems: ActionItem[];
   openDecisions: Decision[];
   openRisks: Risk[];
@@ -53,7 +55,7 @@ export async function processMeeting(
 ): Promise<ProcessingResult> {
   const startTime = Date.now();
   const llm = getLLMClient();
-  const { meeting, projectMembers, openActionItems, openDecisions, openRisks } =
+  const { meeting, projectMembers, projectContacts, openActionItems, openDecisions, openRisks } =
     context;
 
   log.info('Starting meeting processing', {
@@ -61,6 +63,7 @@ export async function processMeeting(
     category: meeting.category,
     transcriptLength: meeting.transcript_text?.length || 0,
     projectMemberCount: projectMembers.length,
+    projectContactCount: projectContacts.length,
     openActionItemCount: openActionItems.length,
     openDecisionCount: openDecisions.length,
     openRiskCount: openRisks.length,
@@ -175,6 +178,7 @@ export async function processMeeting(
     const proposedItems = transformToProposedItems(
       response.data,
       projectMembers,
+      projectContacts,
       (meeting.attendees as any[]) || []
     );
 
@@ -224,9 +228,10 @@ export async function processMeeting(
 function transformToProposedItems(
   output: LLMOutputContract,
   projectMembers: Profile[],
+  projectContacts: ProjectContact[],
   attendees: any[]
 ): ProposedItems {
-  const resolutionContext = { projectMembers, attendees };
+  const resolutionContext = { projectMembers, projectContacts, attendees };
 
   // Transform action items
   const actionItems: ProposedActionItem[] = output.action_items.map((ai) => {
@@ -242,6 +247,7 @@ function transformToProposedItems(
         name: resolved.name,
         email: resolved.email,
         resolved_user_id: resolved.resolvedUserId,
+        resolved_contact_id: resolved.resolvedContactId,
       },
       owner_resolution_status: resolved.resolutionStatus,
       due_date: ai.due_date,
@@ -265,6 +271,7 @@ function transformToProposedItems(
         name: resolved.name,
         email: resolved.email,
         resolved_user_id: resolved.resolvedUserId,
+        resolved_contact_id: resolved.resolvedContactId,
       },
       decision_maker_resolution_status: resolved.resolutionStatus,
       outcome: d.outcome,
@@ -291,6 +298,7 @@ function transformToProposedItems(
         name: resolved.name,
         email: resolved.email,
         resolved_user_id: resolved.resolvedUserId,
+        resolved_contact_id: resolved.resolvedContactId,
       },
       owner_resolution_status: resolved.resolutionStatus,
       status: r.status as any,

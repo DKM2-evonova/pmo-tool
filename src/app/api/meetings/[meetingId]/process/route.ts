@@ -85,6 +85,14 @@ export async function POST(
     const projectMembers =
       members?.map((m) => m.profile as any).filter(Boolean) || [];
 
+    // Get project contacts for owner resolution
+    const { data: contacts } = await supabase
+      .from('project_contacts')
+      .select('*')
+      .eq('project_id', meeting.project_id);
+
+    const projectContacts = contacts || [];
+
     // Get relevant open items for context injection (filtered by semantic similarity)
     const relevantContext = await getRelevantContext(
       meeting.project_id,
@@ -95,6 +103,7 @@ export async function POST(
     const result = await processMeeting({
       meeting,
       projectMembers,
+      projectContacts,
       openActionItems: relevantContext.actionItems,
       openDecisions: relevantContext.decisions,
       openRisks: relevantContext.risks,

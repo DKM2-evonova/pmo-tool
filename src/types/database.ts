@@ -54,6 +54,28 @@ export interface ProjectMemberWithProfile extends ProjectMember {
   profile: Profile;
 }
 
+// Project Contact (person associated with project without login account)
+export interface ProjectContact {
+  id: string;
+  project_id: string;
+  name: string;
+  email: string | null;
+  avatar_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Unified team member type for displaying both users and contacts together
+export interface UnifiedTeamMember {
+  id: string;
+  name: string;
+  email: string | null;
+  avatar_url: string | null;
+  type: 'user' | 'contact';
+  project_role?: ProjectRole; // Only for users
+  created_at: string;
+}
+
 // Meeting
 export interface Meeting extends BaseEntity {
   project_id: string;
@@ -300,6 +322,7 @@ export interface ProposedOwner {
   name: string;
   email: string | null;
   resolved_user_id: string | null;
+  resolved_contact_id: string | null;
 }
 
 export interface ProposedEvidence {

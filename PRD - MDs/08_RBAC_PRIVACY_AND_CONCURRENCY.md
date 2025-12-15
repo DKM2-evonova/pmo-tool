@@ -7,6 +7,8 @@
 ## Capabilities (MUST)
 - Create/delete projects: **Admin only**
 - Manage members / RBAC / force unlock: **Admin only**
+- Manage project contacts: **Admin** (all projects), **Program Manager** (their projects only)
+- View project contacts: **Admin, Program Manager, Consultant** (project-scoped)
 - Ingest transcript / run processing: **Admin, Project Consultant, Program/Portfolio Manager**
 - Review proposed changes: **Admin, Project Consultant, Program/Portfolio Manager**
 - Publish meeting updates: **Admin, Project Consultant, Program/Portfolio Manager**

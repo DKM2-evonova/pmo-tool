@@ -24,12 +24,14 @@ import type {
   ProposedDecision,
   ProposedRisk,
   Profile,
+  ProjectContact,
 } from '@/types/database';
 
 interface ReviewUIProps {
   meetingId: string;
   proposedChangeSet: ProposedChangeSet & { locked_by?: Profile | null };
   projectMembers: Profile[];
+  projectContacts: ProjectContact[];
   lockHolder: Profile | null;
   isAdmin: boolean;
   currentUserId: string;
@@ -39,6 +41,7 @@ export function ReviewUI({
   meetingId,
   proposedChangeSet,
   projectMembers,
+  projectContacts,
   lockHolder,
   isAdmin,
   currentUserId,
@@ -135,31 +138,60 @@ export function ReviewUI({
     }));
   };
 
-  // Update owner resolution
+  // Update owner resolution (handles both users and contacts)
   const updateOwner = (
     type: 'action_items' | 'risks',
     tempId: string,
-    userId: string
+    selectedValue: string
   ) => {
-    const member = projectMembers.find((m) => m.id === userId);
-    if (!member) return;
+    // Value is prefixed with 'user:' or 'contact:'
+    const [ownerType, id] = selectedValue.includes(':')
+      ? selectedValue.split(':')
+      : ['user', selectedValue]; // Fallback for backwards compatibility
 
-    setProposedItems((prev) => ({
-      ...prev,
-      [type]: prev[type].map((item: any) =>
-        item.temp_id === tempId
-          ? {
-              ...item,
-              owner: {
-                name: member.full_name || member.email,
-                email: member.email,
-                resolved_user_id: member.id,
-              },
-              owner_resolution_status: 'resolved',
-            }
-          : item
-      ),
-    }));
+    if (ownerType === 'user') {
+      const member = projectMembers.find((m) => m.id === id);
+      if (!member) return;
+
+      setProposedItems((prev) => ({
+        ...prev,
+        [type]: prev[type].map((item: any) =>
+          item.temp_id === tempId
+            ? {
+                ...item,
+                owner: {
+                  name: member.full_name || member.email,
+                  email: member.email,
+                  resolved_user_id: member.id,
+                  resolved_contact_id: null,
+                },
+                owner_resolution_status: 'resolved',
+              }
+            : item
+        ),
+      }));
+    } else if (ownerType === 'contact') {
+      const contact = projectContacts.find((c) => c.id === id);
+      if (!contact) return;
+
+      setProposedItems((prev) => ({
+        ...prev,
+        [type]: prev[type].map((item: any) =>
+          item.temp_id === tempId
+            ? {
+                ...item,
+                owner: {
+                  name: contact.name,
+                  email: contact.email,
+                  resolved_user_id: null,
+                  resolved_contact_id: contact.id,
+                },
+                owner_resolution_status: 'resolved',
+              }
+            : item
+        ),
+      }));
+    }
   };
 
   // Accept unknown owner as placeholder
@@ -468,7 +500,13 @@ export function ReviewUI({
                               </div>
                             )}
                             <Select
-                              value={item.owner.resolved_user_id || ''}
+                              value={
+                                item.owner.resolved_user_id
+                                  ? `user:${item.owner.resolved_user_id}`
+                                  : item.owner.resolved_contact_id
+                                    ? `contact:${item.owner.resolved_contact_id}`
+                                    : ''
+                              }
                               onChange={(e) =>
                                 updateOwner(
                                   'action_items',
@@ -476,12 +514,18 @@ export function ReviewUI({
                                   e.target.value
                                 )
                               }
-                              options={projectMembers.map((m) => ({
-                                value: m.id,
-                                label: m.full_name || m.email,
-                              }))}
+                              options={[
+                                ...projectMembers.map((m) => ({
+                                  value: `user:${m.id}`,
+                                  label: m.full_name || m.email,
+                                })),
+                                ...projectContacts.map((c) => ({
+                                  value: `contact:${c.id}`,
+                                  label: `${c.name}${c.email ? ` (${c.email})` : ''} [Contact]`,
+                                })),
+                              ]}
                               placeholder="Select owner"
-                              className="w-48"
+                              className="w-64"
                             />
                           </div>
                         )}
@@ -736,16 +780,28 @@ export function ReviewUI({
                               </div>
                             )}
                             <Select
-                              value={item.owner.resolved_user_id || ''}
+                              value={
+                                item.owner.resolved_user_id
+                                  ? `user:${item.owner.resolved_user_id}`
+                                  : item.owner.resolved_contact_id
+                                    ? `contact:${item.owner.resolved_contact_id}`
+                                    : ''
+                              }
                               onChange={(e) =>
                                 updateOwner('risks', item.temp_id, e.target.value)
                               }
-                              options={projectMembers.map((m) => ({
-                                value: m.id,
-                                label: m.full_name || m.email,
-                              }))}
+                              options={[
+                                ...projectMembers.map((m) => ({
+                                  value: `user:${m.id}`,
+                                  label: m.full_name || m.email,
+                                })),
+                                ...projectContacts.map((c) => ({
+                                  value: `contact:${c.id}`,
+                                  label: `${c.name}${c.email ? ` (${c.email})` : ''} [Contact]`,
+                                })),
+                              ]}
                               placeholder="Select owner"
-                              className="w-48"
+                              className="w-64"
                             />
                           </div>
                         )}

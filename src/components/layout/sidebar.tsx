@@ -12,6 +12,7 @@ import {
   FileText,
   Settings,
   Users,
+  Users2,
   ChevronDown,
   ChevronRight,
   Menu,
@@ -68,6 +69,11 @@ export function Sidebar({ projects, userRole }: SidebarProps) {
       name: 'Users',
       href: '/admin/users',
       icon: Users,
+    },
+    {
+      name: 'Team',
+      href: '/admin/team',
+      icon: Users2,
     },
     {
       name: 'Meetings',

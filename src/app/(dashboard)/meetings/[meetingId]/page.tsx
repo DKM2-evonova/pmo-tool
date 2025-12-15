@@ -83,6 +83,14 @@ export default async function MeetingPage({ params }: MeetingPageProps) {
   const projectMembers =
     members?.map((m) => m.profile as any).filter(Boolean) || [];
 
+  // Get project contacts for owner resolution
+  const { data: contacts } = await supabase
+    .from('project_contacts')
+    .select('*')
+    .eq('project_id', meeting.project_id);
+
+  const projectContacts = contacts || [];
+
   // Get user profile
   const { data: profile } = await supabase
     .from('profiles')
@@ -103,6 +111,7 @@ export default async function MeetingPage({ params }: MeetingPageProps) {
           meetingId={meetingId}
           proposedChangeSet={proposedChangeSet}
           projectMembers={projectMembers}
+          projectContacts={projectContacts}
           lockHolder={lockHolder}
           isAdmin={isAdmin}
           currentUserId={user?.id || ''}
