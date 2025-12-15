@@ -15,6 +15,7 @@ function getOpenAIClient(): OpenAI {
   if (!openaiClient) {
     if (!process.env.OPENAI_API_KEY) {
       log.error('OpenAI API key not configured');
+      throw new Error('OpenAI API key not configured. Set OPENAI_API_KEY environment variable.');
     }
     openaiClient = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,

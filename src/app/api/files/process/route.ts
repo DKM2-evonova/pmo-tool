@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { processFile } from '@/lib/file-processing';
+import { loggers } from '@/lib/logger';
+
+const log = loggers.file;
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,18 +43,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Process the file
-    console.log(`Processing file: ${file.name}, type: ${file.type}, size: ${file.size} bytes`);
+    log.info('Processing file', { fileName: file.name, fileType: file.type, fileSize: file.size });
     const result = await processFile(file);
 
     if (!result.success) {
-      console.error(`File processing failed for ${file.name}:`, result.error);
+      log.warn('File processing failed', { fileName: file.name, error: result.error });
       return NextResponse.json(
         { error: result.error },
         { status: 400 }
       );
     }
 
-    console.log(`Successfully processed ${file.name}, extracted ${result.text?.length || 0} characters`);
+    log.info('Successfully processed file', { fileName: file.name, charCount: result.text?.length || 0 });
 
     return NextResponse.json({
       success: true,
@@ -62,7 +65,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('File processing API error:', error);
+    log.error('File processing API error', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: `Failed to process file: ${error instanceof Error ? error.message : 'Unknown error'}. Please try copying the text directly.` },
       { status: 500 }

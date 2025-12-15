@@ -1,8 +1,33 @@
-import { createServiceClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { loggers } from '@/lib/logger';
+
+const log = loggers.api;
 
 export async function POST() {
   try {
+    // Authentication check
+    const userSupabase = await createClient();
+    const { data: { user } } = await userSupabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Admin authorization check
+    const { data: profile } = await userSupabase
+      .from('profiles')
+      .select('global_role')
+      .eq('id', user.id)
+      .single();
+
+    if (profile?.global_role !== 'admin') {
+      log.warn('Non-admin attempted to access debug seed route', { userId: user.id });
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    }
+
+    log.info('Admin accessing debug seed route', { userId: user.id });
+
     const supabase = createServiceClient();
 
     // Create a test user (this won't work with Supabase Auth, but let's try)

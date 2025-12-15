@@ -1,5 +1,8 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
+import { loggers } from '@/lib/logger';
+
+const log = loggers.api;
 
 interface UpdateRequest {
   content?: string;
@@ -18,6 +21,16 @@ interface StatusUpdate {
   created_by_name: string;
 }
 
+interface UpdateActionItemData {
+  title?: string;
+  description?: string | null;
+  status?: string;
+  due_date?: string | null;
+  owner_user_id?: string | null;
+  owner_name?: string | null;
+  owner_email?: string | null;
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -26,7 +39,7 @@ export async function POST(
     const resolvedParams = await params;
     const { id } = resolvedParams;
 
-    console.log('API Route - Update action item:', id);
+    log.info('Updating action item', { actionItemId: id });
 
     // Check authentication
     const supabase = await createClient();
@@ -39,13 +52,14 @@ export async function POST(
     const serviceSupabase = createServiceClient();
 
     // Get the action item to check project access
-    const { data: existingItem } = await serviceSupabase
+    const { data: existingItem, error: existingError } = await serviceSupabase
       .from('action_items')
       .select('project_id')
       .eq('id', id)
       .single();
 
-    if (!existingItem) {
+    if (existingError || !existingItem) {
+      log.warn('Action item not found', { actionItemId: id, error: existingError?.message });
       return NextResponse.json({ error: 'Action item not found' }, { status: 404 });
     }
 
@@ -73,7 +87,7 @@ export async function POST(
 
     // Handle status update (content provided)
     if (content) {
-      console.log('Adding status update for action item:', id);
+      log.debug('Adding status update for action item', { actionItemId: id });
 
       // Get user profile for the update
       const { data: profile } = await serviceSupabase
@@ -82,7 +96,7 @@ export async function POST(
         .eq('id', user.id)
         .single();
 
-      console.log('User profile:', profile);
+      log.debug('User profile retrieved', { userId: user.id, hasProfile: !!profile });
 
       // Get current action item
       const { data: actionItem, error: fetchError } = await serviceSupabase
@@ -91,10 +105,10 @@ export async function POST(
         .eq('id', id)
         .single();
 
-      console.log('Action item fetch result:', { actionItem, error: fetchError });
+      log.debug('Action item fetch result', { actionItemId: id, hasData: !!actionItem, hasError: !!fetchError });
 
       if (fetchError || !actionItem) {
-        console.error('Action item not found:', { id, fetchError, actionItem });
+        log.warn('Action item not found for status update', { actionItemId: id, error: fetchError?.message });
         return NextResponse.json({ error: `Action item not found: ${fetchError?.message || 'Unknown error'}` }, { status: 404 });
       }
 
@@ -113,7 +127,7 @@ export async function POST(
         const parsedUpdates = actionItem.updates ? JSON.parse(actionItem.updates) : [];
         currentUpdates = Array.isArray(parsedUpdates) ? parsedUpdates : [];
       } catch (parseError) {
-        console.error('Failed to parse action item updates:', parseError);
+        log.warn('Failed to parse action item updates', { actionItemId: id, error: parseError instanceof Error ? parseError.message : 'Parse error' });
         currentUpdates = [];
       }
       const updatedUpdates = [...currentUpdates, update];
@@ -124,7 +138,7 @@ export async function POST(
         .eq('id', id);
 
       if (updateError) {
-        console.error('Failed to add status update:', updateError);
+        log.error('Failed to add status update', { actionItemId: id, error: updateError.message });
         return NextResponse.json({ error: 'Failed to add status update' }, { status: 500 });
       }
 
@@ -134,7 +148,7 @@ export async function POST(
     // Handle general action item update
     else if (title !== undefined || description !== undefined || status !== undefined || owner_user_id !== undefined || due_date !== undefined) {
       // Prepare update data
-      const updateData: any = {};
+      const updateData: UpdateActionItemData = {};
       if (title !== undefined) updateData.title = title;
       if (description !== undefined) updateData.description = description || null;
       if (status !== undefined) updateData.status = status;
@@ -168,7 +182,7 @@ export async function POST(
         .eq('id', id);
 
       if (updateError) {
-        console.error('Failed to update action item:', updateError);
+        log.error('Failed to update action item', { actionItemId: id, error: updateError.message });
         return NextResponse.json({ error: 'Failed to update action item' }, { status: 500 });
       }
 
@@ -178,7 +192,7 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
 
   } catch (error) {
-    console.error('Unexpected error:', error);
+    log.error('Unexpected error in action item update', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

@@ -343,3 +343,52 @@ const LOCK_TIMEOUT_MINUTES = parseInt(process.env.LOCK_TIMEOUT_MINUTES || '30', 
 - **Input Validation**: Consider adding Zod validation in a future iteration
 - **Rate Limiting**: Consider implementing @upstash/ratelimit in a future iteration
 - **Transaction Handling**: Consider for critical multi-step operations
+
+---
+
+## Fixes Applied (December 15, 2025)
+
+### Critical Security Fix:
+
+1. **Debug Seed Route Authorization** (`src/app/api/debug/seed/route.ts`)
+   - **CRITICAL**: Route was completely unprotected - anyone could POST to inject test data
+   - Added authentication check (401 for unauthenticated users)
+   - Added admin role authorization (403 for non-admin users)
+   - Added structured logging for access attempts
+
+### High Priority Fixes:
+
+2. **Structured Logging Migration** - Migrated console.log/console.error to structured logger:
+   - `src/app/api/action-items/[id]/update/route.ts` - 8 statements migrated to `loggers.api`
+   - `src/app/api/risks/[id]/update/route.ts` - 8 statements migrated to `loggers.api`
+   - `src/lib/file-processing.ts` - 20+ statements migrated to `loggers.file`
+   - `src/app/api/files/process/route.ts` - 3 statements migrated to `loggers.file`
+
+3. **Type Safety Improvements**:
+   - Added `UpdateActionItemData` interface in action-items update route (replaced `any`)
+   - Added `UpdateRiskData` interface in risks update route (replaced `any`)
+   - Added `MatchRpcResult` interface in `src/lib/embeddings/duplicate-detection.ts` (replaced 3 `any` usages)
+   - Fixed mammoth type from `any` to proper `Awaited<typeof import('mammoth')>`
+
+4. **Error Handling Improvements**:
+   - Added error handling for `.single()` queries in action-items and risks update routes
+   - Fixed `src/lib/embeddings/client.ts` to throw immediately when OpenAI API key is missing (was logging error but continuing)
+
+### Files Modified:
+
+| File | Changes |
+|------|---------|
+| `src/app/api/action-items/[id]/update/route.ts` | Structured logger, `UpdateActionItemData` type, error handling |
+| `src/app/api/risks/[id]/update/route.ts` | Structured logger, `UpdateRiskData` type, error handling |
+| `src/app/api/debug/seed/route.ts` | Auth + admin check (security fix), structured logger |
+| `src/lib/embeddings/client.ts` | Throw error on missing API key |
+| `src/lib/embeddings/duplicate-detection.ts` | `MatchRpcResult` type for RPC responses |
+| `src/lib/file-processing.ts` | Structured logger, proper mammoth type |
+| `src/app/api/files/process/route.ts` | Structured logger |
+
+### Remaining Issues (Deferred):
+
+- **Input Validation with Zod**: Large refactor affecting all API routes
+- **Rate Limiting**: Requires external service (Upstash Redis)
+- **Transaction Handling**: Requires Supabase database functions/RPCs
+- **Console.log in client components**: Client-side logging is separate concern

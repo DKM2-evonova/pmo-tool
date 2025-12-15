@@ -1,13 +1,16 @@
 import pdfParse from 'pdf-parse';
+import { loggers } from '@/lib/logger';
+
+const log = loggers.file;
 
 // Dynamic import for mammoth to avoid loading issues
-let mammoth: any = null;
+let mammoth: Awaited<typeof import('mammoth')> | null = null;
 const loadMammoth = async () => {
   if (!mammoth) {
     try {
       mammoth = await import('mammoth');
     } catch (error) {
-      console.error('Failed to load mammoth library:', error);
+      log.error('Failed to load mammoth library', { error: error instanceof Error ? error.message : 'Unknown error' });
       throw new Error('DOCX processing library not available. Please try copying the text directly.');
     }
   }
@@ -25,10 +28,10 @@ export interface FileProcessingResult {
  */
 export async function extractTextFromDocx(buffer: ArrayBuffer): Promise<FileProcessingResult> {
   try {
-    console.log('Loading mammoth library for DOCX processing...');
+    log.debug('Loading mammoth library for DOCX processing');
     // Load mammoth library
     const mammothLib = await loadMammoth();
-    console.log('Mammoth library loaded successfully');
+    log.debug('Mammoth library loaded successfully');
 
     // First, verify it's actually a DOCX file (ZIP archive with PK signature)
     const bytes = new Uint8Array(buffer);
@@ -37,7 +40,7 @@ export async function extractTextFromDocx(buffer: ArrayBuffer): Promise<FileProc
     const isZipFile = signature[0] === 0x50 && signature[1] === 0x4B &&
                       (signature[2] === 0x03 || signature[2] === 0x05 || signature[2] === 0x07);
 
-    console.log('DOCX file signature:', signatureHex, 'isZipFile:', isZipFile, 'buffer size:', buffer.byteLength);
+    log.debug('DOCX file signature check', { signatureHex, isZipFile, bufferSize: buffer.byteLength });
 
     if (!isZipFile) {
       return {
@@ -70,7 +73,7 @@ export async function extractTextFromDocx(buffer: ArrayBuffer): Promise<FileProc
 
     for (const strategy of strategies) {
       try {
-        console.log(`Attempting DOCX extraction with strategy: ${strategy.name}`);
+        log.debug('Attempting DOCX extraction', { strategy: strategy.name });
         const result = await strategy.fn();
 
         // Handle different result formats
@@ -93,35 +96,35 @@ export async function extractTextFromDocx(buffer: ArrayBuffer): Promise<FileProc
 
         // Log any messages from mammoth
         if (result.messages && result.messages.length > 0) {
-          console.log(`DOCX conversion messages for ${strategy.name}:`, result.messages);
+          log.debug('DOCX conversion messages', { strategy: strategy.name, messages: result.messages });
         }
 
         // Check if we got meaningful text
         if (extractedText && extractedText.length > 10) { // Require at least 10 characters
-          console.log(`Successfully extracted ${extractedText.length} characters using ${strategy.name}`);
+          log.info('Successfully extracted text', { strategy: strategy.name, charCount: extractedText.length });
           return {
             success: true,
             text: extractedText,
           };
         } else {
-          console.log(`Strategy ${strategy.name} returned insufficient text (${extractedText.length} chars)`);
+          log.debug('Strategy returned insufficient text', { strategy: strategy.name, charCount: extractedText.length });
         }
 
       } catch (strategyError) {
-        console.error(`Strategy ${strategy.name} failed:`, strategyError);
+        log.warn('DOCX extraction strategy failed', { strategy: strategy.name, error: strategyError instanceof Error ? strategyError.message : 'Unknown error' });
         // Continue to next strategy
       }
     }
 
     // If all strategies failed, try a manual approach for common issues
-    console.log('All mammoth strategies failed, trying manual DOCX parsing...');
+    log.debug('All mammoth strategies failed, trying manual DOCX parsing');
     try {
       const manualResult = await extractTextFromDocxManual(nodeBuffer);
       if (manualResult.success) {
         return manualResult;
       }
     } catch (manualError) {
-      console.error('Manual DOCX parsing also failed:', manualError);
+      log.warn('Manual DOCX parsing also failed', { error: manualError instanceof Error ? manualError.message : 'Unknown error' });
     }
 
     return {
@@ -130,10 +133,10 @@ export async function extractTextFromDocx(buffer: ArrayBuffer): Promise<FileProc
     };
 
   } catch (error) {
-    console.error('Critical error in DOCX processing:', error);
+    log.error('Critical error in DOCX processing', { error: error instanceof Error ? error.message : 'Unknown error' });
 
     if (error instanceof Error) {
-      console.error('Final error details:', {
+      log.debug('Final error details', {
         name: error.name,
         message: error.message,
         stack: error.stack?.substring(0, 500)
@@ -200,7 +203,7 @@ async function extractTextFromDocxManual(buffer: Buffer): Promise<FileProcessing
     };
 
   } catch (error) {
-    console.error('Manual DOCX extraction failed:', error);
+    log.warn('Manual DOCX extraction failed', { error: error instanceof Error ? error.message : 'Unknown error' });
     return {
       success: false,
       error: 'Manual extraction failed',
@@ -227,7 +230,7 @@ export async function extractTextFromPdf(buffer: ArrayBuffer): Promise<FileProce
       text: data.text.trim(),
     };
   } catch (error) {
-    console.error('Error processing PDF file:', error);
+    log.error('Error processing PDF file', { error: error instanceof Error ? error.message : 'Unknown error' });
     return {
       success: false,
       error: 'Failed to extract text from PDF file. The file may be corrupted, password-protected, or in an unsupported format.',
@@ -261,7 +264,7 @@ export async function extractTextFromRtf(buffer: ArrayBuffer): Promise<FileProce
       text: cleanedText,
     };
   } catch (error) {
-    console.error('Error processing RTF file:', error);
+    log.error('Error processing RTF file', { error: error instanceof Error ? error.message : 'Unknown error' });
     return {
       success: false,
       error: 'Failed to extract text from RTF file. The file may be corrupted or in an unsupported format.',
@@ -336,7 +339,7 @@ export async function extractTextFromBuffer(buffer: ArrayBuffer): Promise<FilePr
       error: 'No readable text content found in the file.',
     };
   } catch (error) {
-    console.error('Error extracting text from buffer:', error);
+    log.error('Error extracting text from buffer', { error: error instanceof Error ? error.message : 'Unknown error' });
     return {
       success: false,
       error: 'Failed to read text from file. The file may be corrupted.',
@@ -349,7 +352,7 @@ export async function extractTextFromBuffer(buffer: ArrayBuffer): Promise<FilePr
  */
 export async function processFile(file: File): Promise<FileProcessingResult> {
   try {
-    console.log(`Starting file processing for ${file.name} (${file.type}, ${file.size} bytes)`);
+    log.info('Starting file processing', { fileName: file.name, fileType: file.type, fileSize: file.size });
 
     // Validate file size (max 50MB)
     const maxSize = 50 * 1024 * 1024; // 50MB
@@ -362,37 +365,37 @@ export async function processFile(file: File): Promise<FileProcessingResult> {
 
     const buffer = await file.arrayBuffer();
     const bytes = new Uint8Array(buffer);
-    console.log(`File buffer loaded, size: ${buffer.byteLength} bytes`);
+    log.debug('File buffer loaded', { bufferSize: buffer.byteLength });
 
     // Determine file type based on content, not just extension/mime type
     const fileType = detectFileType(bytes, file.name, file.type);
-    console.log(`Detected file type: ${fileType}`);
+    log.debug('Detected file type', { fileType });
 
     switch (fileType) {
       case 'docx':
-        console.log('Processing as DOCX file');
+        log.debug('Processing as DOCX file');
         return await extractTextFromDocx(buffer);
 
       case 'doc':
-        console.log('Processing as legacy DOC file - will attempt DOCX extraction');
+        log.debug('Processing as legacy DOC file - will attempt DOCX extraction');
         // Try DOCX extraction first, as some .doc files might actually be mislabeled DOCX
         return await extractTextFromDocx(buffer);
 
       case 'pdf':
-        console.log('Processing as PDF file');
+        log.debug('Processing as PDF file');
         return await extractTextFromPdf(buffer);
 
       case 'rtf':
-        console.log('Processing as RTF file');
+        log.debug('Processing as RTF file');
         return await extractTextFromRtf(buffer);
 
       case 'text':
-        console.log('Processing as plain text file');
+        log.debug('Processing as plain text file');
         return await extractTextFromBuffer(buffer);
 
       default:
         // Try multiple formats as fallback
-        console.log('Unknown file type, trying multiple extraction methods...');
+        log.debug('Unknown file type, trying multiple extraction methods');
         const fallbackResults = await tryMultipleFormats(buffer, file.name);
         if (fallbackResults.success) {
           return fallbackResults;
@@ -404,7 +407,7 @@ export async function processFile(file: File): Promise<FileProcessingResult> {
         };
     }
   } catch (error) {
-    console.error('Unexpected error in processFile:', error);
+    log.error('Unexpected error in processFile', { error: error instanceof Error ? error.message : 'Unknown error' });
     return {
       success: false,
       error: `File processing failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try copying the text directly.`,
@@ -484,14 +487,14 @@ async function tryMultipleFormats(buffer: ArrayBuffer, fileName: string): Promis
 
   for (const method of methods) {
     try {
-      console.log(`Trying ${method.name} extraction for ${fileName}...`);
+      log.debug('Trying extraction method', { method: method.name, fileName });
       const result = await method.fn();
       if (result.success && result.text && result.text.length > 10) {
-        console.log(`Successfully extracted text using ${method.name} method`);
+        log.info('Successfully extracted text', { method: method.name, fileName });
         return result;
       }
     } catch (error) {
-      console.log(`${method.name} extraction failed:`, error);
+      log.debug('Extraction method failed', { method: method.name, error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }
 

@@ -10,6 +10,15 @@ import { loggers } from '@/lib/logger';
 const log = loggers.embedding;
 const DEFAULT_THRESHOLD = 0.85;
 
+/**
+ * Response type from pgvector match RPC functions
+ */
+interface MatchRpcResult {
+  id: string;
+  title: string;
+  similarity: number;
+}
+
 export interface DuplicateCandidate {
   id: string;
   title: string;
@@ -54,7 +63,7 @@ export async function checkActionItemDuplicate(
     });
   }
 
-  const candidates: DuplicateCandidate[] = (similar || []).map((item: any) => ({
+  const candidates: DuplicateCandidate[] = ((similar as MatchRpcResult[] | null) || []).map((item) => ({
     id: item.id,
     title: item.title,
     similarity: item.similarity,
@@ -110,7 +119,7 @@ export async function checkDecisionDuplicate(
     });
   }
 
-  const candidates: DuplicateCandidate[] = (similar || []).map((item: any) => ({
+  const candidates: DuplicateCandidate[] = ((similar as MatchRpcResult[] | null) || []).map((item) => ({
     id: item.id,
     title: item.title,
     similarity: item.similarity,
@@ -166,7 +175,7 @@ export async function checkRiskDuplicate(
     });
   }
 
-  const candidates: DuplicateCandidate[] = (similar || []).map((item: any) => ({
+  const candidates: DuplicateCandidate[] = ((similar as MatchRpcResult[] | null) || []).map((item) => ({
     id: item.id,
     title: item.title,
     similarity: item.similarity,
