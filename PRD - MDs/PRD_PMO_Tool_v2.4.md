@@ -1,7 +1,7 @@
 # Product Requirements Document (PRD): PMO Tool
 
-- **Version**: 2.3
-- **Date**: December 13, 2025
+- **Version**: 2.4
+- **Date**: December 15, 2025
 - **Status**: Approved for Build
 - **Version Control**: Hosted on GitHub
 
@@ -216,6 +216,7 @@ Visibility is strictly project-scoped via row-level security. A user only sees p
 - US-F1: Generate recaps and tone analysis for a meeting.
 - US-F2: Fishbone artifact outputs both a structured outline and a rendered diagram (SVG) for remediation meetings.
 - US-F3: Local exports (CSV/DOCX/PDF) with Office-optimized or Google-optimized templates.
+- US-F4: Project Status Report: consolidated view of Action Items (Open/In Progress), Risks/Issues (Open), and Key Decisions with export to PDF and Excel (multi-sheet workbook).
 **10.7 Epic H - Error Handling**
 - US-H1: LLM Fallback: failover to GPT-4o if Gemini fails; notify Admin if fallback usage exceeds 15% over rolling 24 hours.
 - US-H2: Invalid JSON: utility model attempts repair; if still invalid, mark meeting status Failed with actionable error message.

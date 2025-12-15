@@ -8,6 +8,7 @@ import {
   Clock,
   AlertCircle,
   ChevronRight,
+  FileBarChart,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -361,6 +362,20 @@ export default async function DashboardPage() {
                   <p className="font-medium text-surface-900">View Kanban Board</p>
                   <p className="text-sm text-surface-500">
                     Manage action items visually
+                  </p>
+                </div>
+              </Link>
+              <Link
+                href="/reports/project-status"
+                className="flex items-center gap-4 rounded-lg border border-surface-200 p-4 transition-colors hover:bg-surface-50"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-warning-50">
+                  <FileBarChart className="h-5 w-5 text-warning-600" />
+                </div>
+                <div>
+                  <p className="font-medium text-surface-900">View Status Report</p>
+                  <p className="text-sm text-surface-500">
+                    Action items, risks & decisions
                   </p>
                 </div>
               </Link>
