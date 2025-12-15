@@ -28,6 +28,136 @@ import { loggers } from '@/lib/logger';
 
 const log = loggers.llm;
 
+/**
+ * Clean up common LLM output issues before validation
+ * This handles issues that LLMs commonly produce that don't match our schema
+ */
+function cleanupLLMOutput(data: any): any {
+  if (!data || typeof data !== 'object') return data;
+
+  // Deep clone to avoid mutating original
+  const cleaned = JSON.parse(JSON.stringify(data));
+
+  // Fix date formats (convert various formats to YYYY-MM-DD)
+  const fixDate = (dateStr: string | null | undefined): string | null => {
+    if (!dateStr) return null;
+    // Already in correct format
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+    // Try to parse and reformat
+    try {
+      const date = new Date(dateStr);
+      if (!isNaN(date.getTime())) {
+        return date.toISOString().split('T')[0];
+      }
+    } catch {
+      // Fall through
+    }
+    return null; // Invalid date, set to null
+  };
+
+  // Fix timestamp formats (convert to HH:MM:SS or null)
+  const fixTimestamp = (ts: string | null | undefined): string | null => {
+    if (!ts) return null;
+    if (/^\d{2}:\d{2}:\d{2}$/.test(ts)) return ts;
+    // Try to extract time from various formats
+    const match = ts.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (match) {
+      const h = match[1].padStart(2, '0');
+      const m = match[2];
+      const s = match[3] || '00';
+      return `${h}:${m}:${s}`;
+    }
+    return null;
+  };
+
+  // Fix enum values (normalize casing)
+  const fixStatus = (status: string): string => {
+    const normalized = status?.toLowerCase();
+    if (normalized === 'open') return 'Open';
+    if (normalized === 'in progress' || normalized === 'in_progress' || normalized === 'inprogress')
+      return 'In Progress';
+    if (normalized === 'closed') return 'Closed';
+    return status;
+  };
+
+  const fixLevel = (level: string): string => {
+    const normalized = level?.toLowerCase();
+    if (normalized === 'low') return 'Low';
+    if (normalized === 'med' || normalized === 'medium') return 'Med';
+    if (normalized === 'high') return 'High';
+    return level;
+  };
+
+  // Fix meeting date
+  if (cleaned.meeting?.date) {
+    cleaned.meeting.date = fixDate(cleaned.meeting.date) || cleaned.meeting.date;
+  }
+
+  // Fix action items
+  if (Array.isArray(cleaned.action_items)) {
+    cleaned.action_items = cleaned.action_items.map((ai: any) => ({
+      ...ai,
+      status: fixStatus(ai.status),
+      due_date: fixDate(ai.due_date),
+      evidence: Array.isArray(ai.evidence)
+        ? ai.evidence.map((e: any) => ({
+            ...e,
+            timestamp: fixTimestamp(e.timestamp),
+          }))
+        : ai.evidence,
+    }));
+  }
+
+  // Fix action items summary in recap
+  if (Array.isArray(cleaned.recap?.action_items_summary)) {
+    cleaned.recap.action_items_summary = cleaned.recap.action_items_summary.map((ai: any) => ({
+      ...ai,
+      status: fixStatus(ai.status),
+      due_date: fixDate(ai.due_date),
+    }));
+  }
+
+  // Fix decisions
+  if (Array.isArray(cleaned.decisions)) {
+    cleaned.decisions = cleaned.decisions.map((d: any) => ({
+      ...d,
+      evidence: Array.isArray(d.evidence)
+        ? d.evidence.map((e: any) => ({
+            ...e,
+            timestamp: fixTimestamp(e.timestamp),
+          }))
+        : d.evidence,
+    }));
+  }
+
+  // Fix risks
+  if (Array.isArray(cleaned.risks)) {
+    cleaned.risks = cleaned.risks.map((r: any) => ({
+      ...r,
+      status: fixStatus(r.status),
+      probability: fixLevel(r.probability),
+      impact: fixLevel(r.impact),
+      evidence: Array.isArray(r.evidence)
+        ? r.evidence.map((e: any) => ({
+            ...e,
+            timestamp: fixTimestamp(e.timestamp),
+          }))
+        : r.evidence,
+    }));
+  }
+
+  // Fix tone participant levels
+  if (Array.isArray(cleaned.tone?.participants)) {
+    cleaned.tone.participants = cleaned.tone.participants.map((p: any) => ({
+      ...p,
+      happiness: fixLevel(p.happiness),
+      buy_in: fixLevel(p.buy_in),
+    }));
+  }
+
+  return cleaned;
+}
+
 export interface ProcessingResult {
   success: boolean;
   output?: LLMOutputContract;
@@ -102,31 +232,50 @@ export async function processMeeting(
     // Generate with primary model (fallback handled internally)
     const response = await llm.generateJSON<LLMOutputContract>(prompt);
 
-    // Validate the output
-    const validation = validateLLMOutput(response.data);
+    // Apply programmatic cleanup before validation
+    const cleanedData = cleanupLLMOutput(response.data);
+    log.debug('Applied programmatic cleanup to LLM output', {
+      meetingId: meeting.id,
+    });
+
+    // Validate the cleaned output
+    const validation = validateLLMOutput(cleanedData);
 
     if (!validation.success) {
-      // Try to repair with utility model
-      log.warn('LLM output validation failed, attempting repair', {
+      // Log validation issues for debugging
+      log.warn('LLM output validation failed after cleanup, attempting repair', {
         meetingId: meeting.id,
         issueCount: validation.errors?.issues.length || 0,
-        issues: validation.errors?.issues.slice(0, 5).map((i) => i.message),
+        issues: validation.errors?.issues.slice(0, 5).map((i) => ({
+          path: i.path.join('.'),
+          message: i.message,
+        })),
       });
-      
-      const schemaStr = JSON.stringify(validation.errors?.issues);
+
+      // Format validation errors with paths for the repair prompt
+      const errorDetails = validation.errors?.issues.map((i) => ({
+        path: i.path.join('.'),
+        message: i.message,
+        expected: i.code,
+      }));
       const repairResponse = await llm.repairJSON(
-        JSON.stringify(response.data),
-        schemaStr
+        JSON.stringify(cleanedData), // Pass the already-cleaned data
+        JSON.stringify(errorDetails, null, 2)
       );
 
       try {
         const repairedData = JSON.parse(repairResponse.content);
-        const revalidation = validateLLMOutput(repairedData);
+        // Apply cleanup to repaired data as well
+        const cleanedRepairedData = cleanupLLMOutput(repairedData);
+        const revalidation = validateLLMOutput(cleanedRepairedData);
 
         if (!revalidation.success) {
           log.error('JSON repair failed - validation still failing', {
             meetingId: meeting.id,
-            issues: revalidation.errors?.issues.map((i) => i.message),
+            issues: revalidation.errors?.issues.map((i) => ({
+              path: i.path.join('.'),
+              message: i.message,
+            })),
           });
           return {
             success: false,
@@ -138,7 +287,8 @@ export async function processMeeting(
         }
 
         log.info('JSON repair successful', { meetingId: meeting.id });
-        response.data = revalidation.data!;
+        // Update validation to use the repaired and validated data
+        validation.data = revalidation.data;
       } catch (parseError) {
         log.error('JSON repair parsing failed', {
           meetingId: meeting.id,
@@ -154,9 +304,12 @@ export async function processMeeting(
       }
     }
 
+    // Use validated data from here on (either from initial validation or repair)
+    const validatedData = validation.data!;
+
     // Validate fishbone for category
     const fishboneValidation = validateFishboneForCategory(
-      response.data.fishbone,
+      validatedData.fishbone,
       meeting.category
     );
     if (!fishboneValidation.valid) {
@@ -176,7 +329,7 @@ export async function processMeeting(
 
     // Transform to proposed items with owner resolution
     const proposedItems = transformToProposedItems(
-      response.data,
+      validatedData,
       projectMembers,
       projectContacts,
       (meeting.attendees as any[]) || []
@@ -198,7 +351,7 @@ export async function processMeeting(
 
     return {
       success: true,
-      output: response.data,
+      output: validatedData,
       proposedItems,
       model: response.model,
       isFallback: response.isFallback,

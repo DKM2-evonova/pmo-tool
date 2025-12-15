@@ -31,7 +31,7 @@ export const LLM_SETTINGS = {
   },
   // Utility model (Gemini Flash) settings - for JSON repair
   geminiFlash: {
-    maxOutputTokens: 4096, // Sufficient for JSON repair tasks
+    maxOutputTokens: 16384, // Large enough to handle full meeting JSON repair
     temperature: 0.1, // Very low for deterministic JSON output
   },
 } as const;
@@ -69,17 +69,20 @@ export class LLMClient {
    */
   async generate(
     prompt: string,
-    systemPrompt?: string
+    systemPrompt?: string,
+    options?: { jsonMode?: boolean }
   ): Promise<LLMResponse> {
     const startTime = Date.now();
     const promptLength = prompt.length;
     const systemPromptLength = systemPrompt?.length || 0;
     const totalInputChars = promptLength + systemPromptLength;
-    
+    const jsonMode = options?.jsonMode ?? false;
+
     log.info('LLM generation request', {
       promptLength,
       systemPromptLength,
       totalInputChars,
+      jsonMode,
       hasGemini: !!this.gemini,
       hasOpenAI: !!this.openai,
     });
@@ -91,16 +94,18 @@ export class LLMClient {
           model: 'gemini-3-pro-preview',
           maxOutputTokens: LLM_SETTINGS.gemini.maxOutputTokens,
           temperature: LLM_SETTINGS.gemini.temperature,
+          jsonMode,
         });
-        
+
         const generationConfig: GenerationConfig = {
           maxOutputTokens: LLM_SETTINGS.gemini.maxOutputTokens,
           temperature: LLM_SETTINGS.gemini.temperature,
           topP: LLM_SETTINGS.gemini.topP,
           topK: LLM_SETTINGS.gemini.topK,
+          ...(jsonMode && { responseMimeType: 'application/json' }),
         };
-        
-        const model = this.gemini.getGenerativeModel({ 
+
+        const model = this.gemini.getGenerativeModel({
           model: 'gemini-3-pro-preview',
           generationConfig,
         });
@@ -123,6 +128,7 @@ export class LLMClient {
           inputChars: totalInputChars,
           outputChars: text.length,
           latencyMs,
+          jsonMode,
         });
 
         return {
@@ -200,31 +206,46 @@ export class LLMClient {
 
   /**
    * Generate JSON using primary model with fallback
+   * Uses JSON mode for guaranteed valid JSON output
    */
   async generateJSON<T>(
     prompt: string,
     systemPrompt?: string
   ): Promise<{ data: T } & LLMResponse> {
-    log.debug('Generating JSON response');
-    const response = await this.generate(prompt, systemPrompt);
+    log.debug('Generating JSON response with JSON mode enabled');
+    const response = await this.generate(prompt, systemPrompt, { jsonMode: true });
 
-    // Extract JSON from response
+    // Extract JSON from response using multiple strategies
+    let jsonString = response.content.trim();
+    let extractionMethod = 'direct';
+
+    // Strategy 1: Check for markdown code blocks (some models still wrap even in JSON mode)
     const jsonMatch = response.content.match(/```(?:json)?\s*([\s\S]*?)```/);
-    const jsonString = jsonMatch ? jsonMatch[1].trim() : response.content.trim();
-    const wasWrapped = !!jsonMatch;
+    if (jsonMatch) {
+      jsonString = jsonMatch[1].trim();
+      extractionMethod = 'markdown';
+    } else {
+      // Strategy 2: Find JSON object boundaries if content has extra text
+      const firstBrace = response.content.indexOf('{');
+      const lastBrace = response.content.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace > firstBrace && firstBrace !== 0) {
+        jsonString = response.content.substring(firstBrace, lastBrace + 1);
+        extractionMethod = 'boundaries';
+      }
+    }
 
     try {
       const data = JSON.parse(jsonString) as T;
       log.debug('JSON parsed successfully', {
-        wasWrapped,
+        extractionMethod,
         jsonLength: jsonString.length,
       });
       return { ...response, data };
     } catch (parseError) {
       log.error('JSON parsing failed', {
-        wasWrapped,
+        extractionMethod,
         jsonLength: jsonString.length,
-        rawContentPreview: response.content.substring(0, 200),
+        rawContentPreview: response.content.substring(0, 500),
         parseError: parseError instanceof Error ? parseError.message : 'Unknown error',
       });
       throw new Error(`Failed to parse JSON from LLM response: ${parseError instanceof Error ? parseError.message : 'Unknown parse error'}`);
@@ -236,32 +257,39 @@ export class LLMClient {
    */
   async repairJSON(
     invalidJson: string,
-    schema: string
+    validationErrors: string
   ): Promise<LLMResponse> {
     const startTime = Date.now();
-    
+
     log.info('Attempting JSON repair', {
       invalidJsonLength: invalidJson.length,
-      schemaLength: schema.length,
+      validationErrorsLength: validationErrors.length,
     });
 
-    const prompt = `Fix this invalid JSON to match the schema. Return ONLY valid JSON, no explanation.
+    const prompt = `You are a JSON repair assistant. Fix the validation errors in the provided JSON.
 
-Schema:
-${schema}
+VALIDATION ERRORS (these need to be fixed):
+${validationErrors}
 
-Invalid JSON:
+JSON TO FIX:
 ${invalidJson}
 
-Fixed JSON:`;
+INSTRUCTIONS:
+1. Fix ONLY the fields mentioned in the validation errors
+2. Preserve all other data exactly as-is
+3. Return ONLY the corrected JSON object - no markdown, no explanation, no code blocks
+4. The response must be valid parseable JSON starting with { and ending with }
+
+CORRECTED JSON:`;
 
     if (this.gemini) {
       const generationConfig: GenerationConfig = {
         maxOutputTokens: LLM_SETTINGS.geminiFlash.maxOutputTokens,
         temperature: LLM_SETTINGS.geminiFlash.temperature,
+        responseMimeType: 'application/json', // Force JSON output
       };
-      
-      const model = this.gemini.getGenerativeModel({ 
+
+      const model = this.gemini.getGenerativeModel({
         model: 'gemini-2.5-flash',
         generationConfig,
       });
@@ -270,10 +298,35 @@ Fixed JSON:`;
         const result = await model.generateContent(prompt);
         const text = result.response.text();
 
-        // Extract JSON
+        // Extract JSON using multiple strategies
+        let content = text.trim();
+
+        // Strategy 1: Check for markdown code blocks
         const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-        const content = jsonMatch ? jsonMatch[1].trim() : text.trim();
+        if (jsonMatch) {
+          content = jsonMatch[1].trim();
+        } else {
+          // Strategy 2: Find JSON object boundaries
+          const firstBrace = text.indexOf('{');
+          const lastBrace = text.lastIndexOf('}');
+          if (firstBrace !== -1 && lastBrace > firstBrace) {
+            content = text.substring(firstBrace, lastBrace + 1);
+          }
+        }
+
         const latencyMs = Date.now() - startTime;
+
+        // Validate it's actually parseable JSON before returning
+        try {
+          JSON.parse(content);
+        } catch {
+          log.error('JSON repair produced invalid JSON', {
+            latencyMs,
+            rawResponsePreview: text.substring(0, 500),
+            extractedContentPreview: content.substring(0, 500),
+          });
+          throw new Error('JSON repair produced invalid JSON output');
+        }
 
         log.info('JSON repair completed', {
           inputLength: invalidJson.length,
