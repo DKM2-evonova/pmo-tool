@@ -3,8 +3,8 @@
 This folder contains **authoritative constraints** distilled from the PRD. Its purpose is to prevent re-interpretation and keep implementation decisions consistent across sessions.
 
 ## Precedence (conflict resolution)
-1) **This Context Pack** (enums/contracts/must-rules)  
-2) PRD (v2.3, 2025-12-13)  
+1) **This Context Pack** (enums/contracts/must-rules)
+2) PRD (v2.4, 2025-12-15)
 3) Codebase implementation details
 
 ## Non-negotiables (summary)
@@ -14,7 +14,7 @@ This folder contains **authoritative constraints** distilled from the PRD. Its p
 - **Context-aware updates**: prefer UPDATE/CLOSE over CREATE by injecting existing open items.
 - **Evidence required** for all extracted items (traceable to transcript text).
 - **Tech stack is fixed** (Next.js/Tailwind on Cloud Run; Supabase Postgres+RLS+pgvector).
-- **LLM strategy is fixed** (Primary Gemini 3 Pro Preview, Fallback GPT-5.2, Utility Gemini 2.5 Flash; 15% rolling 24h fallback circuit-breaker alert).
+- **LLM strategy is fixed** (Primary Gemini 3 Pro Preview, Fallback GPT-4o, Utility Gemini Flash; 15% rolling 24h fallback circuit-breaker alert).
 
 ## How to use this pack in Cursor
 - Treat each file as a **contract**: follow enums exactly; do not add new values.

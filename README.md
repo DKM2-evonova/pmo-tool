@@ -18,13 +18,14 @@ The PMO Tool is an automation layer that sits on top of an organization's existi
 - **Smart Context Filtering**: Uses vector similarity to filter relevant open items, reducing token usage for large projects
 - **5 Meeting Categories**: Project, Governance, Discovery, Alignment, Remediation
 - **Review Workflow**: Staging area for human validation with edit and reject capabilities before publishing
-- **Owner Resolution**: 6-step pipeline for resolving owner identity from transcripts
+- **Owner Resolution**: 7-step pipeline for resolving owner identity from transcripts (including project contacts)
 - **Duplicate Detection**: Semantic matching using pgvector embeddings (threshold: 0.85)
 - **Decision Log**: Track key decisions with outcomes and decision makers
 - **Risk Register**: Risk/issue management with probability/impact assessment and severity matrix
 - **Kanban Board**: Visual task management for action items with optimistic UI updates
 - **Dashboard Reporting**: Due today/past due items and 5-business-day lookahead for proactive task management
-- **Export**: CSV/DOCX/PDF export for action items, decisions, and risks
+- **Export**: CSV/DOCX/PDF export for action items, decisions, risks, and project status reports
+- **Project Contacts**: Manage non-login users (external stakeholders) for owner resolution
 - **RBAC**: Role-based access control with project scoping
 - **Evidence Trail**: All extracted items include transcript evidence for auditability
 - **Cost Monitoring**: Circuit breaker alerts when fallback LLM usage exceeds 15% in 24-hour window
@@ -142,6 +143,7 @@ supabase/
 - `profiles` - User profiles (extends Supabase auth)
 - `projects` - Project definitions with milestones
 - `project_members` - Project membership (for RLS)
+- `project_contacts` - Non-login users/external stakeholders per project
 - `meetings` - Meeting records with transcripts
 - `action_items` - Action items with embeddings and status updates
 - `decisions` - Decision log with outcomes and decision makers
@@ -318,12 +320,13 @@ This filtered context is injected into the LLM prompt to favor UPDATE/CLOSE oper
 
 ### Owner Resolution Pipeline
 
-1. **Direct match**: Map email from Meet API or attendee list to profile
-2. **Email inference**: Match names to emails from meeting invites
-3. **Conference-room heuristic**: Infer owner from room device responses
-4. **Fuzzy match**: Match names against project roster (requires confirmation)
-5. **Ambiguous**: Multiple matches require manual selection
-6. **Fallback**: Assign to 'Unknown' for manual resolution
+1. **Direct email match (Users)**: Map email from Meet API or attendee list to user profile
+2. **Direct email match (Contacts)**: Map email to project contacts (non-login users)
+3. **Email inference**: Match names to emails from meeting invites (best effort)
+4. **Conference-room heuristic**: Infer owner from room device responses
+5. **Fuzzy match**: Match names against project roster (requires confirmation)
+6. **Ambiguous**: Multiple matches require manual selection
+7. **Fallback**: Assign to 'Unknown' for manual resolution
 
 ### Semantic Duplicate Detection
 
@@ -405,7 +408,9 @@ Proprietary - All rights reserved
 
 ## Additional Resources
 
-- Product Requirements: See `PRD - MDs/` directory for detailed specifications
-- Database Schema: See `supabase/migrations/` for schema definitions
-- Type Definitions: See `src/types/` for TypeScript interfaces
+- **Product Requirements**: See `PRD - MDs/` directory for detailed specifications
+- **Database Schema**: See `supabase/migrations/` for schema definitions
+- **Type Definitions**: See `src/types/` for TypeScript interfaces
+- **Changelog**: See `CHANGELOG.md` for version history and recent changes
+- **Resolved Issues**: See `docs/RESOLVED_ISSUES.md` for historical debugging reference
 
