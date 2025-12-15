@@ -23,6 +23,7 @@ The PMO Tool is an automation layer that sits on top of an organization's existi
 - **Decision Log**: Track key decisions with outcomes and decision makers
 - **Risk Register**: Risk/issue management with probability/impact assessment and severity matrix
 - **Kanban Board**: Visual task management for action items with optimistic UI updates
+- **Dashboard Reporting**: Due today/past due items and 5-business-day lookahead for proactive task management
 - **Export**: CSV/DOCX/PDF export for action items, decisions, and risks
 - **RBAC**: Role-based access control with project scoping
 - **Evidence Trail**: All extracted items include transcript evidence for auditability
@@ -345,6 +346,17 @@ This filtered context is injected into the LLM prompt to favor UPDATE/CLOSE oper
 - Status tracking with update history and comments
 - Visual dashboard showing risk distribution by severity
 - Filtering by severity (High/Medium/Low) and status
+
+### Dashboard Reporting
+
+The main dashboard provides at-a-glance visibility into urgent and upcoming work:
+
+- **Due Today / Past Due**: Shows all open action items that are due today or overdue, sorted by due date (oldest first). Past due items display with red badges, items due today show yellow badges.
+- **Coming Up**: Displays action items due within the next 5 business days (excluding weekends), helping users plan their upcoming workload.
+- **Quick Actions**: Easy access to process meetings, create action items, or view the Kanban board.
+- **Recent Meetings**: Latest 5 processed meetings with status indicators.
+
+All items are clickable and link directly to their detail views for quick access.
 
 ## Security
 
