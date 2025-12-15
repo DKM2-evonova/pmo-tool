@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { processMeeting } from '@/lib/llm/processor';
 import { getRelevantContext } from '@/lib/llm/relevant-context';
+import { loggers } from '@/lib/logger';
+
+const log = loggers.llm;
 
 export async function POST(
   request: NextRequest,
@@ -10,6 +13,16 @@ export async function POST(
   try {
     const supabase = await createClient();
     const { meetingId } = await params;
+
+    // Verify user is authenticated
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     // Get meeting
     const { data: meeting, error: meetingError } = await supabase
@@ -20,6 +33,29 @@ export async function POST(
 
     if (meetingError || !meeting) {
       return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    }
+
+    // Verify user has access to the project (either as member or admin)
+    const { data: membership } = await supabase
+      .from('project_members')
+      .select('project_id')
+      .eq('project_id', meeting.project_id)
+      .eq('user_id', user.id)
+      .single();
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('global_role')
+      .eq('id', user.id)
+      .single();
+
+    if (!membership && profile?.global_role !== 'admin') {
+      log.warn('Unauthorized process attempt', {
+        userId: user.id,
+        meetingId,
+        projectId: meeting.project_id,
+      });
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     if (meeting.status === 'Deleted') {
@@ -33,7 +69,10 @@ export async function POST(
       .eq('id', meetingId);
 
     if (statusError) {
-      console.error('Failed to update meeting status to Processing:', statusError);
+      log.error('Failed to update meeting status to Processing', {
+        meetingId,
+        error: statusError.message,
+      });
       return NextResponse.json({ error: 'Failed to update meeting status' }, { status: 500 });
     }
 
@@ -61,8 +100,8 @@ export async function POST(
       openRisks: relevantContext.risks,
     });
 
-    // Log LLM metrics
-    await supabase.from('llm_metrics').insert({
+    // Log LLM metrics (non-blocking - don't fail the request if this fails)
+    const { error: metricsError } = await supabase.from('llm_metrics').insert({
       model: result.model,
       is_fallback: result.isFallback,
       success: result.success,
@@ -70,6 +109,13 @@ export async function POST(
       meeting_id: meetingId,
       error_message: result.error || null,
     });
+
+    if (metricsError) {
+      log.warn('Failed to log LLM metrics', {
+        meetingId,
+        error: metricsError.message,
+      });
+    }
 
     if (!result.success) {
       // Update meeting to Failed
@@ -124,7 +170,10 @@ export async function POST(
       isFallback: result.isFallback,
     });
   } catch (error) {
-    console.error('Processing API error:', error);
+    log.error('Processing API error', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      errorStack: error instanceof Error ? error.stack?.substring(0, 500) : undefined,
+    });
     const errorMessage =
       error instanceof Error ? error.message : 'Processing failed';
     return NextResponse.json({ error: errorMessage }, { status: 500 });

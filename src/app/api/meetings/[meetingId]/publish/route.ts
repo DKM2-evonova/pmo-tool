@@ -70,19 +70,66 @@ export async function POST(
       );
     }
 
-    // Check lock
-    if (changeSet.locked_by_user_id && changeSet.locked_by_user_id !== user.id) {
-      const lockTime = new Date(changeSet.locked_at);
-      const now = new Date();
-      const diffMinutes = (now.getTime() - lockTime.getTime()) / 1000 / 60;
+    // Lock timeout in minutes (configurable via env)
+    const LOCK_TIMEOUT_MINUTES = parseInt(
+      process.env.LOCK_TIMEOUT_MINUTES || '30',
+      10
+    );
 
-      if (diffMinutes < 30) {
-        return NextResponse.json(
-          { error: 'Meeting is locked by another user' },
-          { status: 409 }
-        );
+    // Check if another user holds a valid lock
+    if (changeSet.locked_by_user_id && changeSet.locked_by_user_id !== user.id) {
+      // Handle case where locked_at might be null (data integrity edge case)
+      if (changeSet.locked_at) {
+        const lockTime = new Date(changeSet.locked_at);
+        const now = new Date();
+        const diffMinutes = (now.getTime() - lockTime.getTime()) / 1000 / 60;
+
+        if (diffMinutes < LOCK_TIMEOUT_MINUTES) {
+          return NextResponse.json(
+            { error: 'Meeting is locked by another user' },
+            { status: 409 }
+          );
+        }
       }
+      // If locked_at is null but there's a lock holder, treat as expired lock
+      // and proceed to acquire
     }
+
+    // Acquire lock atomically to prevent race conditions
+    const { data: lockAcquired, error: lockError } = await supabase.rpc(
+      'acquire_change_set_lock',
+      {
+        p_change_set_id: changeSet.id,
+        p_user_id: user.id,
+        p_expected_version: changeSet.lock_version,
+      }
+    );
+
+    if (lockError) {
+      log.error('Failed to acquire lock', {
+        meetingId,
+        changeSetId: changeSet.id,
+        error: lockError.message,
+      });
+      return NextResponse.json(
+        { error: 'Failed to acquire lock for publishing' },
+        { status: 500 }
+      );
+    }
+
+    if (!lockAcquired) {
+      log.warn('Lock acquisition failed - concurrent modification', {
+        meetingId,
+        changeSetId: changeSet.id,
+        currentLockHolder: changeSet.locked_by_user_id,
+      });
+      return NextResponse.json(
+        { error: 'Could not acquire lock - meeting may have been modified by another user' },
+        { status: 409 }
+      );
+    }
+
+    log.debug('Lock acquired successfully', { meetingId, changeSetId: changeSet.id });
 
     const proposedItems = changeSet.proposed_items as {
       action_items: ProposedActionItem[];
