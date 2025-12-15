@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { ReviewUI } from '@/components/meetings/review-ui';
 import { MeetingDetails } from '@/components/meetings/meeting-details';
 import { RecapDisplay } from '@/components/meetings/recap-display';
+import { MeetingSummaryExport } from '@/components/export/meeting-summary-export';
 
 interface MeetingPageProps {
   params: Promise<{ meetingId: string }>;
@@ -112,12 +113,23 @@ export default async function MeetingPage({ params }: MeetingPageProps) {
       {meeting.status === 'Published' && (
         <>
           <div className="card">
-            <div className="flex items-center gap-2">
-              <span className="badge-success">Published</span>
-              <span className="text-sm text-surface-500">
-                Processed on{' '}
-                {new Date(meeting.processed_at).toLocaleDateString()}
-              </span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="badge-success">Published</span>
+                <span className="text-sm text-surface-500">
+                  Processed on{' '}
+                  {new Date(meeting.processed_at).toLocaleDateString()}
+                </span>
+              </div>
+              {/* Export button */}
+              {meeting.recap && (
+                <MeetingSummaryExport
+                  meeting={meeting as any}
+                  recap={meeting.recap as any}
+                  tone={meeting.tone as any}
+                  showTone={meeting.category === 'Alignment'}
+                />
+              )}
             </div>
           </div>
 

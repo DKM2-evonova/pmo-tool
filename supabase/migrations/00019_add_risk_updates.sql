@@ -8,3 +8,5 @@ COMMENT ON COLUMN risks.updates IS 'Array of status updates with timestamps and 
 CREATE INDEX idx_risks_updates ON risks USING gin(updates);
 
 
+
+

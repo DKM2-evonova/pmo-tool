@@ -19,7 +19,7 @@ export default async function ActionItemsPage({
   } = await supabase.auth.getUser();
 
   const params = await searchParams;
-  const view = params.view || 'list';
+  const view = params.view || 'kanban';
   const projectFilter = params.project;
   const ownerFilter = params.owner;
 
