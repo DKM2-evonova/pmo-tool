@@ -51,6 +51,7 @@ export function ProcessingStatus({
   const [progress, setProgress] = useState(0);
   const [aiSubstageIndex, setAiSubstageIndex] = useState(0);
   const substageIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const steps = [
     { id: 'loading_context', label: 'Loading project context...' },
@@ -119,13 +120,23 @@ export function ProcessingStatus({
         setCurrentStep('loading_context');
         setProgress(10);
 
-        // Call the processing API
+        // Call the processing API with timeout
         setCurrentStep('processing');
         setProgress(30);
 
-        const response = await fetch(`/api/meetings/${meetingId}/process`, {
-          method: 'POST',
-        });
+        // Create abort controller for timeout (5 minutes max for LLM processing)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000);
+
+        let response: Response;
+        try {
+          response = await fetch(`/api/meetings/${meetingId}/process`, {
+            method: 'POST',
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timeoutId);
+        }
 
         const result = await response.json();
 
@@ -148,17 +159,34 @@ export function ProcessingStatus({
         setProgress(100);
 
         // Redirect to review page after a moment
-        setTimeout(() => {
+        redirectTimeoutRef.current = setTimeout(() => {
           router.push(`/meetings/${meetingId}`);
         }, 1500);
       } catch (err) {
         console.error('Processing error:', err);
         setCurrentStep('failed');
-        setError(err instanceof Error ? err.message : 'Unknown error');
+
+        // Provide user-friendly error messages
+        let errorMessage = 'Unknown error';
+        if (err instanceof Error) {
+          if (err.name === 'AbortError') {
+            errorMessage = 'Processing timed out. The AI is taking longer than expected. Please try again.';
+          } else {
+            errorMessage = err.message;
+          }
+        }
+        setError(errorMessage);
       }
     };
 
     processTranscript();
+
+    // Cleanup: cancel redirect timeout if component unmounts
+    return () => {
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+    };
   }, [meetingId, initialStatus, router]);
 
   const handleRetry = () => {

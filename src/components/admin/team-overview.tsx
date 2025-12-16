@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui';
-import { Search, ChevronDown, ChevronUp, Users, User, Settings, ExternalLink } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Users, User, Settings, Trash2 } from 'lucide-react';
 import { cn, getInitials } from '@/lib/utils';
 import type { Profile, ProjectContact } from '@/types/database';
 
@@ -28,8 +29,10 @@ interface TeamOverviewProps {
 }
 
 export function TeamOverview({ projects }: TeamOverviewProps) {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
+  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
 
   const toggleExpanded = (projectId: string) => {
     setExpandedProjects((prev) => {
@@ -41,6 +44,45 @@ export function TeamOverview({ projects }: TeamOverviewProps) {
       }
       return next;
     });
+  };
+
+  const handleDeleteProject = async (project: ProjectWithTeam) => {
+    const confirmMessage = `Are you sure you want to delete "${project.name}"?\n\nThis will permanently delete:\n- ${project.member_count} team member${project.member_count !== 1 ? 's' : ''}\n- ${project.contact_count} contact${project.contact_count !== 1 ? 's' : ''}\n- All meetings, action items, decisions, and risks\n\nThis action cannot be undone.`;
+
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    setDeletingProjectId(project.id);
+    try {
+      const response = await fetch(`/api/projects/${project.id}`, {
+        method: 'DELETE',
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        throw new Error(responseData.error || 'Failed to delete project');
+      }
+
+      alert(
+        `Project "${responseData.deleted.project}" deleted successfully.\n\n` +
+        `Removed:\n` +
+        `- ${responseData.deleted.meetings} meeting${responseData.deleted.meetings !== 1 ? 's' : ''}\n` +
+        `- ${responseData.deleted.action_items} action item${responseData.deleted.action_items !== 1 ? 's' : ''}\n` +
+        `- ${responseData.deleted.decisions} decision${responseData.deleted.decisions !== 1 ? 's' : ''}\n` +
+        `- ${responseData.deleted.risks} risk${responseData.deleted.risks !== 1 ? 's' : ''}\n` +
+        `- ${responseData.deleted.members} member${responseData.deleted.members !== 1 ? 's' : ''}\n` +
+        `- ${responseData.deleted.contacts} contact${responseData.deleted.contacts !== 1 ? 's' : ''}`
+      );
+
+      router.refresh();
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      alert('Failed to delete project: ' + (error as Error).message);
+    } finally {
+      setDeletingProjectId(null);
+    }
   };
 
   const filteredProjects = projects.filter((project) => {
@@ -154,7 +196,7 @@ export function TeamOverview({ projects }: TeamOverviewProps) {
                             {project.contact_count}
                           </span>
                         </div>
-                        <div className="pl-4">
+                        <div className="pl-4 flex items-center gap-2">
                           <Link
                             href={`/projects/${project.id}/settings`}
                             className="inline-flex items-center gap-1 text-sm text-primary-600 hover:text-primary-700"
@@ -162,6 +204,18 @@ export function TeamOverview({ projects }: TeamOverviewProps) {
                             <Settings className="h-4 w-4" />
                             Manage
                           </Link>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteProject(project);
+                            }}
+                            disabled={deletingProjectId === project.id}
+                            className="inline-flex items-center gap-1 text-sm text-danger-600 hover:text-danger-700 disabled:opacity-50"
+                            title="Delete project"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            {deletingProjectId === project.id ? 'Deleting...' : 'Delete'}
+                          </button>
                         </div>
                       </div>
 

@@ -77,10 +77,6 @@ export function MeetingManagement({ meetings }: MeetingManagementProps) {
 
       // Force a hard refresh to ensure the status update is visible
       router.refresh();
-      // Also wait a bit and refresh again to ensure cache is cleared
-      setTimeout(() => {
-        router.refresh();
-      }, 500);
       setSelectedMeeting(null);
     } catch (error) {
       console.error('Error deleting meeting:', error);
@@ -223,6 +219,9 @@ export function MeetingManagement({ meetings }: MeetingManagementProps) {
     </div>
   );
 }
+
+
+
 
 
 

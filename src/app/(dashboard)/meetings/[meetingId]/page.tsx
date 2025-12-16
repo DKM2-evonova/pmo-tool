@@ -109,6 +109,7 @@ export default async function MeetingPage({ params }: MeetingPageProps) {
       {meeting.status === 'Review' && proposedChangeSet && (
         <ReviewUI
           meetingId={meetingId}
+          projectId={meeting.project_id}
           proposedChangeSet={proposedChangeSet}
           projectMembers={projectMembers}
           projectContacts={projectContacts}

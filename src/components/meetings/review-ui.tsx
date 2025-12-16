@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button, Badge, Modal, ModalFooter, Select, Input, Textarea } from '@/components/ui';
@@ -11,8 +11,8 @@ import {
   XCircle,
   Edit2,
   AlertTriangle,
-  Users,
   User,
+  UserPlus,
   ChevronDown,
   ChevronUp,
   Trash2,
@@ -29,6 +29,7 @@ import type {
 
 interface ReviewUIProps {
   meetingId: string;
+  projectId: string;
   proposedChangeSet: ProposedChangeSet & { locked_by?: Profile | null };
   projectMembers: Profile[];
   projectContacts: ProjectContact[];
@@ -39,15 +40,19 @@ interface ReviewUIProps {
 
 export function ReviewUI({
   meetingId,
+  projectId,
   proposedChangeSet,
   projectMembers,
-  projectContacts,
+  projectContacts: initialProjectContacts,
   lockHolder,
   isAdmin,
   currentUserId,
 }: ReviewUIProps) {
   const router = useRouter();
   const supabase = createClient();
+
+  // Track project contacts locally so we can add new ones without page refresh
+  const [projectContacts, setProjectContacts] = useState<ProjectContact[]>(initialProjectContacts);
 
   const [isLocked, setIsLocked] = useState(!!lockHolder);
   const [hasLock, setHasLock] = useState(
@@ -72,6 +77,17 @@ export function ReviewUI({
   } | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editFormData, setEditFormData] = useState<any>({});
+
+  // New contact modal state
+  const [newContactModalOpen, setNewContactModalOpen] = useState(false);
+  const [newContactName, setNewContactName] = useState('');
+  const [newContactEmail, setNewContactEmail] = useState('');
+  const [newContactTarget, setNewContactTarget] = useState<{
+    type: 'action_items' | 'risks';
+    tempId: string;
+  } | null>(null);
+  const [isAddingContact, setIsAddingContact] = useState(false);
+  const [isAddingAllContacts, setIsAddingAllContacts] = useState(false);
 
   // Acquire lock when entering review mode
   const acquireLock = async () => {
@@ -210,6 +226,159 @@ export function ReviewUI({
           : item
       ),
     }));
+  };
+
+  // Open modal to add new contact for a specific item
+  const openAddContactModal = (
+    type: 'action_items' | 'risks',
+    tempId: string,
+    ownerName: string
+  ) => {
+    setNewContactTarget({ type, tempId });
+    setNewContactName(ownerName);
+    setNewContactEmail('');
+    setNewContactModalOpen(true);
+  };
+
+  // Add a single new contact via API and assign to item
+  const addNewContact = async () => {
+    if (!newContactName.trim() || !newContactTarget) return;
+
+    setIsAddingContact(true);
+    try {
+      const response = await fetch(`/api/projects/${projectId}/contacts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newContactName.trim(),
+          email: newContactEmail.trim() || undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to create contact');
+      }
+
+      const { contact } = await response.json();
+
+      // Add to local contacts list
+      setProjectContacts((prev) => [...prev, contact]);
+
+      // Assign to the target item
+      setProposedItems((prev) => ({
+        ...prev,
+        [newContactTarget.type]: prev[newContactTarget.type].map((item: any) =>
+          item.temp_id === newContactTarget.tempId
+            ? {
+                ...item,
+                owner: {
+                  name: contact.name,
+                  email: contact.email,
+                  resolved_user_id: null,
+                  resolved_contact_id: contact.id,
+                },
+                owner_resolution_status: 'resolved',
+              }
+            : item
+        ),
+      }));
+
+      // Close modal and reset
+      setNewContactModalOpen(false);
+      setNewContactName('');
+      setNewContactEmail('');
+      setNewContactTarget(null);
+    } catch (error) {
+      console.error('Failed to add contact:', error);
+      alert('Failed to add contact: ' + (error as Error).message);
+    } finally {
+      setIsAddingContact(false);
+    }
+  };
+
+  // Get all unique unresolved owner names from action items and risks
+  const getUnresolvedOwnerNames = () => {
+    const unresolvedNames = new Map<string, { type: 'action_items' | 'risks'; tempId: string }[]>();
+
+    proposedItems.action_items
+      .filter((item) => item.accepted && ['unknown', 'ambiguous', 'conference_room'].includes(item.owner_resolution_status))
+      .forEach((item) => {
+        const name = item.owner.name;
+        if (!unresolvedNames.has(name)) {
+          unresolvedNames.set(name, []);
+        }
+        unresolvedNames.get(name)!.push({ type: 'action_items', tempId: item.temp_id });
+      });
+
+    proposedItems.risks
+      .filter((item) => item.accepted && ['unknown', 'ambiguous', 'conference_room'].includes(item.owner_resolution_status))
+      .forEach((item) => {
+        const name = item.owner.name;
+        if (!unresolvedNames.has(name)) {
+          unresolvedNames.set(name, []);
+        }
+        unresolvedNames.get(name)!.push({ type: 'risks', tempId: item.temp_id });
+      });
+
+    return unresolvedNames;
+  };
+
+  // Add all unresolved names as contacts
+  const addAllNewContacts = async () => {
+    const unresolvedNames = getUnresolvedOwnerNames();
+    if (unresolvedNames.size === 0) return;
+
+    setIsAddingAllContacts(true);
+    try {
+      for (const [name, items] of unresolvedNames) {
+        // Create contact
+        const response = await fetch(`/api/projects/${projectId}/contacts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          // Skip if contact already exists, continue with others
+          if (response.status === 409) continue;
+          throw new Error(data.error || 'Failed to create contact');
+        }
+
+        const { contact } = await response.json();
+
+        // Add to local contacts list
+        setProjectContacts((prev) => [...prev, contact]);
+
+        // Update all items with this owner name
+        setProposedItems((prev) => {
+          const updated = { ...prev };
+          for (const item of items) {
+            updated[item.type] = updated[item.type].map((i: any) =>
+              i.temp_id === item.tempId
+                ? {
+                    ...i,
+                    owner: {
+                      name: contact.name,
+                      email: contact.email,
+                      resolved_user_id: null,
+                      resolved_contact_id: contact.id,
+                    },
+                    owner_resolution_status: 'resolved',
+                  }
+                : i
+            );
+          }
+          return updated;
+        });
+      }
+    } catch (error) {
+      console.error('Failed to add contacts:', error);
+      alert('Failed to add some contacts: ' + (error as Error).message);
+    } finally {
+      setIsAddingAllContacts(false);
+    }
   };
 
   // Start editing an item
@@ -420,6 +589,34 @@ export function ReviewUI({
         </div>
       )}
 
+      {/* Add All New Names button when there are unresolved owners */}
+      {hasLock && getUnresolvedOwnerNames().size > 0 && (
+        <div className="card border-primary-200 bg-primary-50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-primary-600" />
+              <div>
+                <p className="font-medium text-primary-700">
+                  {getUnresolvedOwnerNames().size} unresolved name{getUnresolvedOwnerNames().size !== 1 ? 's' : ''} found
+                </p>
+                <p className="text-sm text-primary-600">
+                  Add all new names as project contacts in one click
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={addAllNewContacts}
+              isLoading={isAddingAllContacts}
+            >
+              <UserPlus className="h-4 w-4 mr-1" />
+              Add All as Contacts
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Action Items Section */}
       <div className="card">
         <button
@@ -486,7 +683,7 @@ export function ReviewUI({
                         ) && (
                           <div className="mt-3 space-y-2">
                             {item.owner_resolution_status === 'unknown' && (
-                              <div className="flex gap-2">
+                              <div className="flex flex-wrap gap-2">
                                 <Button
                                   variant="secondary"
                                   size="sm"
@@ -494,9 +691,29 @@ export function ReviewUI({
                                 >
                                   Accept as Placeholder
                                 </Button>
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => openAddContactModal('action_items', item.temp_id, item.owner.name)}
+                                >
+                                  <UserPlus className="h-3 w-3 mr-1" />
+                                  Add as Contact
+                                </Button>
                                 <span className="text-xs text-surface-500 self-center">
-                                  or select existing member:
+                                  or select existing:
                                 </span>
+                              </div>
+                            )}
+                            {['ambiguous', 'conference_room', 'needs_confirmation'].includes(item.owner_resolution_status) && (
+                              <div className="flex gap-2 mb-2">
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => openAddContactModal('action_items', item.temp_id, item.owner.name)}
+                                >
+                                  <UserPlus className="h-3 w-3 mr-1" />
+                                  Add &quot;{item.owner.name}&quot; as Contact
+                                </Button>
                               </div>
                             )}
                             <Select
@@ -524,7 +741,7 @@ export function ReviewUI({
                                   label: `${c.name}${c.email ? ` (${c.email})` : ''} [Contact]`,
                                 })),
                               ]}
-                              placeholder="Select owner"
+                              placeholder="Select existing member or contact"
                               className="w-64"
                             />
                           </div>
@@ -766,7 +983,7 @@ export function ReviewUI({
                         ) && (
                           <div className="mt-3 space-y-2">
                             {item.owner_resolution_status === 'unknown' && (
-                              <div className="flex gap-2">
+                              <div className="flex flex-wrap gap-2">
                                 <Button
                                   variant="secondary"
                                   size="sm"
@@ -774,9 +991,29 @@ export function ReviewUI({
                                 >
                                   Accept as Placeholder
                                 </Button>
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => openAddContactModal('risks', item.temp_id, item.owner.name)}
+                                >
+                                  <UserPlus className="h-3 w-3 mr-1" />
+                                  Add as Contact
+                                </Button>
                                 <span className="text-xs text-surface-500 self-center">
-                                  or select existing member:
+                                  or select existing:
                                 </span>
+                              </div>
+                            )}
+                            {['ambiguous', 'conference_room', 'needs_confirmation'].includes(item.owner_resolution_status) && (
+                              <div className="flex gap-2 mb-2">
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => openAddContactModal('risks', item.temp_id, item.owner.name)}
+                                >
+                                  <UserPlus className="h-3 w-3 mr-1" />
+                                  Add &quot;{item.owner.name}&quot; as Contact
+                                </Button>
                               </div>
                             )}
                             <Select
@@ -800,7 +1037,7 @@ export function ReviewUI({
                                   label: `${c.name}${c.email ? ` (${c.email})` : ''} [Contact]`,
                                 })),
                               ]}
-                              placeholder="Select owner"
+                              placeholder="Select existing member or contact"
                               className="w-64"
                             />
                           </div>
@@ -973,6 +1210,67 @@ export function ReviewUI({
           </Button>
           <Button onClick={saveEditedItem}>
             Save Changes
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* New Contact Modal */}
+      <Modal
+        isOpen={newContactModalOpen}
+        onClose={() => {
+          setNewContactModalOpen(false);
+          setNewContactName('');
+          setNewContactEmail('');
+          setNewContactTarget(null);
+        }}
+        title="Add New Contact"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-surface-600">
+            Add this person as a project contact. They will be available for assignment on all items in this project.
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-surface-700 mb-1">
+              Name <span className="text-danger-500">*</span>
+            </label>
+            <Input
+              value={newContactName}
+              onChange={(e) => setNewContactName(e.target.value)}
+              placeholder="Contact name"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-surface-700 mb-1">
+              Email <span className="text-surface-400">(optional)</span>
+            </label>
+            <Input
+              type="email"
+              value={newContactEmail}
+              onChange={(e) => setNewContactEmail(e.target.value)}
+              placeholder="contact@example.com"
+            />
+          </div>
+        </div>
+
+        <ModalFooter>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setNewContactModalOpen(false);
+              setNewContactName('');
+              setNewContactEmail('');
+              setNewContactTarget(null);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={addNewContact}
+            isLoading={isAddingContact}
+            disabled={!newContactName.trim()}
+          >
+            <UserPlus className="h-4 w-4 mr-1" />
+            Add Contact
           </Button>
         </ModalFooter>
       </Modal>
