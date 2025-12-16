@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
-import { Plus, List, LayoutGrid } from 'lucide-react';
+import { Plus, List, LayoutGrid, Sparkles } from 'lucide-react';
 import { ActionItemsTable } from '@/components/action-items/action-items-table';
 import { KanbanBoard } from '@/components/action-items/kanban-board';
 import { ProjectFilter } from '@/components/action-items/project-filter';
@@ -76,51 +76,63 @@ export default async function ActionItemsPage({
 
   return (
     <div className="space-y-6">
+      {/* Header Section */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-surface-900">Action Items</h1>
-          <p className="mt-1 text-surface-500">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-surface-900">Action Items</h1>
+            <span className="glass-badge text-primary-600">
+              <Sparkles className="mr-1 h-3 w-3" />
+              {actionItems?.length || 0} total
+            </span>
+          </div>
+          <p className="mt-1.5 text-surface-500">
             Track and manage tasks across all projects
           </p>
         </div>
-        <div className="flex gap-2">
-          <Link href="/action-items/new" className="btn-primary">
-            <Plus className="h-4 w-4" />
-            New Task
-          </Link>
-        </div>
+        <Link
+          href="/action-items/new"
+          className="group relative inline-flex items-center gap-2 overflow-hidden rounded-xl bg-gradient-to-r from-primary-600 to-primary-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-primary-500/25 transition-all duration-300 hover:shadow-xl hover:shadow-primary-500/30 hover:scale-[1.02]"
+        >
+          <div className="absolute inset-0 bg-gradient-to-r from-primary-500 to-primary-400 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+          <Plus className="relative h-4 w-4" />
+          <span className="relative">New Task</span>
+        </Link>
       </div>
 
-      {/* Filters and View Toggle */}
-      <div className="flex items-center justify-between">
-        <div className="flex gap-2">
-          <ProjectFilter projects={projects} currentProject={projectFilter} />
-          <OwnerFilter owners={owners} currentOwner={ownerFilter} />
-        </div>
+      {/* Filters and View Toggle Bar */}
+      <div className="glass-panel p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <ProjectFilter projects={projects} currentProject={projectFilter} />
+            <OwnerFilter owners={owners} currentOwner={ownerFilter} />
+          </div>
 
-        <div className="flex rounded-lg border border-surface-200 bg-white">
-          <Link
-            href="?view=list"
-            className={`flex items-center gap-2 px-3 py-2 text-sm ${
-              view === 'list'
-                ? 'bg-surface-100 text-surface-900'
-                : 'text-surface-500 hover:text-surface-700'
-            }`}
-          >
-            <List className="h-4 w-4" />
-            List
-          </Link>
-          <Link
-            href="?view=kanban"
-            className={`flex items-center gap-2 px-3 py-2 text-sm ${
-              view === 'kanban'
-                ? 'bg-surface-100 text-surface-900'
-                : 'text-surface-500 hover:text-surface-700'
-            }`}
-          >
-            <LayoutGrid className="h-4 w-4" />
-            Kanban
-          </Link>
+          {/* Premium View Toggle */}
+          <div className="flex items-center rounded-xl bg-surface-100/80 p-1">
+            <Link
+              href="?view=list"
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 ${
+                view === 'list'
+                  ? 'bg-white text-surface-900 shadow-md'
+                  : 'text-surface-500 hover:text-surface-700'
+              }`}
+            >
+              <List className="h-4 w-4" />
+              List
+            </Link>
+            <Link
+              href="?view=kanban"
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 ${
+                view === 'kanban'
+                  ? 'bg-white text-surface-900 shadow-md'
+                  : 'text-surface-500 hover:text-surface-700'
+              }`}
+            >
+              <LayoutGrid className="h-4 w-4" />
+              Kanban
+            </Link>
+          </div>
         </div>
       </div>
 

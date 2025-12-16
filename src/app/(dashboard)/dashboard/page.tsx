@@ -9,8 +9,11 @@ import {
   AlertCircle,
   ChevronRight,
   FileBarChart,
+  Sparkles,
+  ArrowUpRight,
 } from 'lucide-react';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
 
 // Helper function to get date N business days from now
 function getBusinessDaysFromNow(days: number): Date {
@@ -149,57 +152,103 @@ export default async function DashboardPage() {
       value: openActionItems,
       icon: CheckSquare,
       href: '/action-items',
-      color: 'bg-primary-50 text-primary-600',
+      gradient: 'from-primary-500 to-primary-600',
+      bgGradient: 'from-primary-50 to-primary-100/50',
+      iconColor: 'text-primary-600',
+      shadow: 'shadow-primary-500/20',
     },
     {
       name: 'Active Risks',
       value: openRisks,
       icon: AlertTriangle,
       href: '/risks',
-      color: 'bg-warning-50 text-warning-600',
+      gradient: 'from-warning-500 to-warning-600',
+      bgGradient: 'from-warning-50 to-warning-100/50',
+      iconColor: 'text-warning-600',
+      shadow: 'shadow-warning-500/20',
     },
     {
       name: 'Total Decisions',
       value: decisions.data?.length || 0,
       icon: FileText,
       href: '/decisions',
-      color: 'bg-success-50 text-success-600',
+      gradient: 'from-success-500 to-success-600',
+      bgGradient: 'from-success-50 to-success-100/50',
+      iconColor: 'text-success-600',
+      shadow: 'shadow-success-500/20',
     },
     {
       name: 'Meetings Processed',
       value: meetings.data?.filter((m) => m.status === 'Published').length || 0,
       icon: Calendar,
       href: '/meetings',
-      color: 'bg-surface-100 text-surface-600',
+      gradient: 'from-surface-500 to-surface-600',
+      bgGradient: 'from-surface-100 to-surface-200/50',
+      iconColor: 'text-surface-600',
+      shadow: 'shadow-surface-500/20',
     },
   ];
 
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-surface-900">Dashboard</h1>
-        <p className="mt-1 text-surface-500">
-          Overview of your project management activities
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-surface-900">Dashboard</h1>
+            <span className="glass-badge text-primary-600">
+              <Sparkles className="mr-1 h-3 w-3" />
+              Overview
+            </span>
+          </div>
+          <p className="mt-1.5 text-surface-500">
+            Overview of your project management activities
+          </p>
+        </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
+        {stats.map((stat, index) => (
           <Link
             key={stat.name}
             href={stat.href}
-            className="card-hover flex items-center gap-4"
+            className={cn(
+              'group relative overflow-hidden rounded-2xl p-5',
+              'bg-gradient-to-br',
+              stat.bgGradient,
+              'border border-white/60',
+              'shadow-lg',
+              stat.shadow,
+              'transition-all duration-300',
+              'hover:scale-[1.02] hover:shadow-xl',
+              'animate-fade-in'
+            )}
+            style={{ animationDelay: `${index * 100}ms` }}
           >
-            <div
-              className={`flex h-12 w-12 items-center justify-center rounded-lg ${stat.color}`}
-            >
-              <stat.icon className="h-6 w-6" />
+            {/* Subtle shine effect */}
+            <div className="absolute inset-0 bg-gradient-to-br from-white/40 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+
+            <div className="relative flex items-center gap-4">
+              <div
+                className={cn(
+                  'flex h-12 w-12 items-center justify-center rounded-xl',
+                  'bg-white/80 backdrop-blur-sm',
+                  'shadow-soft',
+                  'transition-transform duration-300 group-hover:scale-110'
+                )}
+              >
+                <stat.icon className={cn('h-6 w-6', stat.iconColor)} />
+              </div>
+              <div>
+                <p className="text-3xl font-bold text-surface-900">{stat.value}</p>
+                <p className="text-sm font-medium text-surface-600">{stat.name}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-2xl font-bold text-surface-900">{stat.value}</p>
-              <p className="text-sm text-surface-500">{stat.name}</p>
+
+            {/* Arrow indicator */}
+            <div className="absolute right-4 top-4 opacity-0 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0 -translate-x-2">
+              <ArrowUpRight className="h-5 w-5 text-surface-400" />
             </div>
           </Link>
         ))}
@@ -210,17 +259,19 @@ export default async function DashboardPage() {
         {/* Left Column - Due Items */}
         <div className="space-y-6">
           {/* Due Today / Past Due Section */}
-          <div className="card">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="h-5 w-5 text-danger-500" />
+          <div className="glass-panel p-6">
+            <div className="mb-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-danger-50 shadow-sm">
+                  <AlertCircle className="h-5 w-5 text-danger-500" />
+                </div>
                 <h2 className="text-lg font-semibold text-surface-900">
                   Due Today / Past Due
                 </h2>
               </div>
               <Link
                 href="/action-items"
-                className="text-sm text-primary-600 hover:text-primary-700"
+                className="text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
               >
                 View all
               </Link>
@@ -231,50 +282,61 @@ export default async function DashboardPage() {
                   <Link
                     key={item.id}
                     href={`/action-items/${item.id}`}
-                    className="group flex items-center justify-between rounded-lg border border-surface-200 p-3 transition-colors hover:bg-surface-50"
+                    className={cn(
+                      'group flex items-center justify-between rounded-xl p-3',
+                      'bg-white/60 backdrop-blur-sm',
+                      'border border-surface-200/60',
+                      'transition-all duration-200',
+                      'hover:bg-white hover:shadow-md hover:border-surface-300/60'
+                    )}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-surface-900 group-hover:text-primary-600">
+                      <p className="truncate text-sm font-medium text-surface-900 group-hover:text-primary-600 transition-colors">
                         {item.description}
                       </p>
-                      <p className="text-xs text-surface-500">
+                      <p className="text-xs text-surface-500 mt-0.5">
                         {getProjectName(item.project)} {getOwnerName(item.owner) ? `• ${getOwnerName(item.owner)}` : ''}
                       </p>
                     </div>
                     <div className="ml-3 flex items-center gap-2">
                       <span
-                        className={`whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${
+                        className={cn(
+                          'whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-medium',
                           isPastDue(item.due_date)
-                            ? 'bg-danger-50 text-danger-700'
-                            : 'bg-warning-50 text-warning-700'
-                        }`}
+                            ? 'bg-danger-50/80 text-danger-700 border border-danger-200/50'
+                            : 'bg-warning-50/80 text-warning-700 border border-warning-200/50'
+                        )}
                       >
                         {formatDueDate(item.due_date)}
                       </span>
-                      <ChevronRight className="h-4 w-4 text-surface-400 group-hover:text-primary-600" />
+                      <ChevronRight className="h-4 w-4 text-surface-400 group-hover:text-primary-600 transition-colors" />
                     </div>
                   </Link>
                 ))}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <CheckSquare className="mb-2 h-8 w-8 text-success-300" />
-                <p className="text-sm text-surface-500">No overdue items</p>
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-success-50/80 mb-3">
+                  <CheckSquare className="h-7 w-7 text-success-400" />
+                </div>
+                <p className="text-sm font-medium text-surface-600">No overdue items</p>
                 <p className="mt-1 text-xs text-surface-400">You&apos;re all caught up!</p>
               </div>
             )}
           </div>
 
           {/* Coming Up Section - Next 5 Business Days */}
-          <div className="card">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-primary-500" />
+          <div className="glass-panel p-6">
+            <div className="mb-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-50 shadow-sm">
+                  <Clock className="h-5 w-5 text-primary-500" />
+                </div>
                 <h2 className="text-lg font-semibold text-surface-900">
                   Coming Up
                 </h2>
               </div>
-              <span className="text-xs text-surface-500">Next 5 business days</span>
+              <span className="glass-badge text-surface-500">Next 5 business days</span>
             </div>
             {upcomingItems.data && upcomingItems.data.length > 0 ? (
               <div className="space-y-2">
@@ -282,29 +344,37 @@ export default async function DashboardPage() {
                   <Link
                     key={item.id}
                     href={`/action-items/${item.id}`}
-                    className="group flex items-center justify-between rounded-lg border border-surface-200 p-3 transition-colors hover:bg-surface-50"
+                    className={cn(
+                      'group flex items-center justify-between rounded-xl p-3',
+                      'bg-white/60 backdrop-blur-sm',
+                      'border border-surface-200/60',
+                      'transition-all duration-200',
+                      'hover:bg-white hover:shadow-md hover:border-surface-300/60'
+                    )}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-surface-900 group-hover:text-primary-600">
+                      <p className="truncate text-sm font-medium text-surface-900 group-hover:text-primary-600 transition-colors">
                         {item.description}
                       </p>
-                      <p className="text-xs text-surface-500">
+                      <p className="text-xs text-surface-500 mt-0.5">
                         {getProjectName(item.project)} {getOwnerName(item.owner) ? `• ${getOwnerName(item.owner)}` : ''}
                       </p>
                     </div>
                     <div className="ml-3 flex items-center gap-2">
-                      <span className="whitespace-nowrap rounded-full bg-primary-50 px-2 py-1 text-xs font-medium text-primary-700">
+                      <span className="whitespace-nowrap rounded-lg bg-primary-50/80 border border-primary-200/50 px-2.5 py-1 text-xs font-medium text-primary-700">
                         {formatDueDate(item.due_date)}
                       </span>
-                      <ChevronRight className="h-4 w-4 text-surface-400 group-hover:text-primary-600" />
+                      <ChevronRight className="h-4 w-4 text-surface-400 group-hover:text-primary-600 transition-colors" />
                     </div>
                   </Link>
                 ))}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <Calendar className="mb-2 h-8 w-8 text-surface-300" />
-                <p className="text-sm text-surface-500">Nothing due soon</p>
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-surface-100/80 mb-3">
+                  <Calendar className="h-7 w-7 text-surface-400" />
+                </div>
+                <p className="text-sm font-medium text-surface-600">Nothing due soon</p>
                 <p className="mt-1 text-xs text-surface-400">No items due in the next 5 business days</p>
               </div>
             )}
@@ -314,97 +384,106 @@ export default async function DashboardPage() {
         {/* Right Column - Quick Actions & Recent Meetings */}
         <div className="space-y-6">
           {/* Quick Actions */}
-          <div className="card">
-            <h2 className="mb-4 text-lg font-semibold text-surface-900">
+          <div className="glass-panel p-6">
+            <h2 className="mb-5 text-lg font-semibold text-surface-900">
               Quick Actions
             </h2>
             <div className="space-y-3">
-              <Link
-                href="/meetings/new"
-                className="flex items-center gap-4 rounded-lg border border-surface-200 p-4 transition-colors hover:bg-surface-50"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-50">
-                  <Calendar className="h-5 w-5 text-primary-600" />
-                </div>
-                <div>
-                  <p className="font-medium text-surface-900">
-                    Process New Meeting
-                  </p>
-                  <p className="text-sm text-surface-500">
-                    Upload a transcript or connect to Google Meet
-                  </p>
-                </div>
-              </Link>
-              <Link
-                href="/action-items/new"
-                className="flex items-center gap-4 rounded-lg border border-surface-200 p-4 transition-colors hover:bg-surface-50"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success-50">
-                  <CheckSquare className="h-5 w-5 text-success-600" />
-                </div>
-                <div>
-                  <p className="font-medium text-surface-900">
-                    Create Action Item
-                  </p>
-                  <p className="text-sm text-surface-500">
-                    Manually add a new task
-                  </p>
-                </div>
-              </Link>
-              <Link
-                href="/action-items?view=kanban"
-                className="flex items-center gap-4 rounded-lg border border-surface-200 p-4 transition-colors hover:bg-surface-50"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-100">
-                  <TrendingUp className="h-5 w-5 text-surface-600" />
-                </div>
-                <div>
-                  <p className="font-medium text-surface-900">View Kanban Board</p>
-                  <p className="text-sm text-surface-500">
-                    Manage action items visually
-                  </p>
-                </div>
-              </Link>
-              <Link
-                href="/reports/project-status"
-                className="flex items-center gap-4 rounded-lg border border-surface-200 p-4 transition-colors hover:bg-surface-50"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-warning-50">
-                  <FileBarChart className="h-5 w-5 text-warning-600" />
-                </div>
-                <div>
-                  <p className="font-medium text-surface-900">View Status Report</p>
-                  <p className="text-sm text-surface-500">
-                    Action items, risks & decisions
-                  </p>
-                </div>
-              </Link>
+              {[
+                {
+                  href: '/meetings/new',
+                  icon: Calendar,
+                  iconBg: 'bg-primary-50',
+                  iconColor: 'text-primary-600',
+                  title: 'Process New Meeting',
+                  description: 'Upload a transcript or connect to Google Meet',
+                },
+                {
+                  href: '/action-items/new',
+                  icon: CheckSquare,
+                  iconBg: 'bg-success-50',
+                  iconColor: 'text-success-600',
+                  title: 'Create Action Item',
+                  description: 'Manually add a new task',
+                },
+                {
+                  href: '/action-items?view=kanban',
+                  icon: TrendingUp,
+                  iconBg: 'bg-surface-100',
+                  iconColor: 'text-surface-600',
+                  title: 'View Kanban Board',
+                  description: 'Manage action items visually',
+                },
+                {
+                  href: '/reports/project-status',
+                  icon: FileBarChart,
+                  iconBg: 'bg-warning-50',
+                  iconColor: 'text-warning-600',
+                  title: 'View Status Report',
+                  description: 'Action items, risks & decisions',
+                },
+              ].map((action) => (
+                <Link
+                  key={action.href}
+                  href={action.href}
+                  className={cn(
+                    'group flex items-center gap-4 rounded-xl p-4',
+                    'bg-white/60 backdrop-blur-sm',
+                    'border border-surface-200/60',
+                    'transition-all duration-200',
+                    'hover:bg-white hover:shadow-md hover:border-surface-300/60 hover:scale-[1.01]'
+                  )}
+                >
+                  <div className={cn(
+                    'flex h-11 w-11 items-center justify-center rounded-xl shadow-sm',
+                    'transition-transform duration-200 group-hover:scale-110',
+                    action.iconBg
+                  )}>
+                    <action.icon className={cn('h-5 w-5', action.iconColor)} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-surface-900 group-hover:text-primary-600 transition-colors">
+                      {action.title}
+                    </p>
+                    <p className="text-sm text-surface-500">
+                      {action.description}
+                    </p>
+                  </div>
+                  <ChevronRight className="h-5 w-5 text-surface-300 group-hover:text-primary-500 transition-colors" />
+                </Link>
+              ))}
             </div>
           </div>
 
           {/* Recent Meetings */}
-          <div className="card">
-            <div className="mb-4 flex items-center justify-between">
+          <div className="glass-panel p-6">
+            <div className="mb-5 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-surface-900">
                 Recent Meetings
               </h2>
               <Link
                 href="/meetings"
-                className="text-sm text-primary-600 hover:text-primary-700"
+                className="text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
               >
                 View all
               </Link>
             </div>
             {meetings.data && meetings.data.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {meetings.data.map((meeting) => (
                   <Link
                     key={meeting.id}
                     href={`/meetings/${meeting.id}`}
-                    className="flex items-center justify-between rounded-lg border border-surface-200 p-3 transition-colors hover:bg-surface-50"
+                    className={cn(
+                      'group flex items-center justify-between rounded-xl p-3',
+                      'bg-white/60 backdrop-blur-sm',
+                      'border border-surface-200/60',
+                      'transition-all duration-200',
+                      'hover:bg-white hover:shadow-md hover:border-surface-300/60'
+                    )}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-surface-900">
+                      <p className="truncate font-medium text-surface-900 group-hover:text-primary-600 transition-colors">
                         {meeting.title || 'Untitled Meeting'}
                       </p>
                       <p className="text-sm text-surface-500">
@@ -413,15 +492,16 @@ export default async function DashboardPage() {
                     </div>
                     <div className="ml-4 flex items-center gap-2">
                       <span
-                        className={`badge ${
+                        className={cn(
+                          'rounded-lg px-2.5 py-1 text-xs font-medium border',
                           meeting.status === 'Published'
-                            ? 'badge-success'
+                            ? 'bg-success-50/80 text-success-700 border-success-200/50'
                             : meeting.status === 'Review'
-                              ? 'badge-warning'
+                              ? 'bg-warning-50/80 text-warning-700 border-warning-200/50'
                               : meeting.status === 'Failed'
-                                ? 'badge-danger'
-                                : 'badge-neutral'
-                        }`}
+                                ? 'bg-danger-50/80 text-danger-700 border-danger-200/50'
+                                : 'bg-surface-100/80 text-surface-600 border-surface-200/50'
+                        )}
                       >
                         {meeting.status}
                       </span>
@@ -430,12 +510,14 @@ export default async function DashboardPage() {
                 ))}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <Calendar className="mb-2 h-8 w-8 text-surface-300" />
-                <p className="text-sm text-surface-500">No meetings yet</p>
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-surface-100/80 mb-3">
+                  <Calendar className="h-7 w-7 text-surface-400" />
+                </div>
+                <p className="text-sm font-medium text-surface-600">No meetings yet</p>
                 <Link
                   href="/meetings/new"
-                  className="mt-3 text-sm text-primary-600 hover:text-primary-700"
+                  className="mt-3 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
                 >
                   Process your first meeting
                 </Link>
@@ -447,4 +529,3 @@ export default async function DashboardPage() {
     </div>
   );
 }
-

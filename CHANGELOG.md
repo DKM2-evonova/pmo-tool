@@ -5,12 +5,26 @@ All notable changes to the PMO Tool are documented here.
 ## [Unreleased]
 
 ### Added
+- **Liquid Glass Design System**: Premium glassmorphism UI with frosted glass panels, elevated cards, and modern animations
+- New UI utility classes: `.glass-panel`, `.glass-card`, `.glass-column`, `.glass-badge`, `.glass-avatar`, `.status-dot-*`
+- New Tailwind theme extensions: glass shadows, glow effects, float/shimmer/pulse animations
 - Project Status Report with PDF and Excel export (multi-sheet workbook)
 - Project Contacts for managing non-login users (external stakeholders)
 - Structured logging utility with scoped loggers (`src/lib/logger.ts`)
 - Processing time estimation based on historical LLM performance data
 - Reusable `FilterSelect` UI component for URL-based filtering (`src/components/ui/filter-select.tsx`)
 - UUID validation utility function (`isValidUUID` in `src/lib/utils.ts`)
+
+### Changed
+- **Complete UI overhaul** with Liquid Glass design system across all pages
+- Dashboard: Glass stat cards with gradients, animated quick actions
+- Action Items: Premium Kanban board with drag animations, glass columns
+- Decisions: Glass panel filters and table with staggered row animations
+- Risks: Glass severity matrix cards, refined table styling
+- All tables: Consistent glass styling, gradient avatars, hover animations
+- Header: Frosted glass background, animated user dropdown
+- Sidebar: Glass navigation links with active state borders
+- Core UI components updated: Button (new glass variant), Input, Select, Badge (dot indicator), Modal
 
 ### Fixed
 - LLM JSON output reliability improvements with better validation

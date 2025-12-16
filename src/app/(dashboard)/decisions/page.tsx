@@ -1,7 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import Link from 'next/link';
-import { FileText, Plus } from 'lucide-react';
-import { formatDateReadable, getInitials } from '@/lib/utils';
+import { FileText, Sparkles } from 'lucide-react';
 import { DecisionsTable } from '@/components/decisions/decisions-table';
 import { DecisionFilters } from '@/components/decisions/decision-filters';
 import { DecisionSort } from '@/components/decisions/decision-sort';
@@ -123,33 +121,44 @@ export default async function DecisionsPage({
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-surface-900">Decision Log</h1>
-          <p className="mt-1 text-surface-500">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-surface-900">Decision Log</h1>
+            <span className="glass-badge text-primary-600">
+              <Sparkles className="mr-1 h-3 w-3" />
+              {decisions?.length || 0} total
+            </span>
+          </div>
+          <p className="mt-1.5 text-surface-500">
             Track key decisions across your projects
           </p>
         </div>
       </div>
 
       {/* Filters and Sorting */}
-      <div className="flex flex-col gap-4">
-        <DecisionFilters
-          projects={projects}
-          decisionMakers={decisionMakers}
-        />
-        <DecisionSort currentSort={currentSort} />
+      <div className="glass-panel p-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <DecisionFilters
+            projects={projects}
+            decisionMakers={decisionMakers}
+          />
+          <DecisionSort currentSort={currentSort} />
+        </div>
       </div>
 
       {decisions && decisions.length > 0 ? (
         <DecisionsTable decisions={decisions} />
       ) : (
-        <div className="card flex flex-col items-center justify-center py-12 text-center">
-          <FileText className="mb-4 h-12 w-12 text-surface-300" />
-          <h3 className="text-lg font-medium text-surface-900">
+        <div className="glass-panel flex flex-col items-center justify-center py-16 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface-100/80 mb-4">
+            <FileText className="h-8 w-8 text-surface-400" />
+          </div>
+          <h3 className="text-lg font-semibold text-surface-900">
             No decisions found
           </h3>
-          <p className="mt-1 text-surface-500">
+          <p className="mt-1.5 text-surface-500 max-w-sm">
             {projectFilter || decisionMakerFilter || statusFilter
               ? 'Try adjusting your filters to see more decisions'
               : 'Decisions will appear here after processing meetings'

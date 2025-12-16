@@ -59,11 +59,31 @@ const config: Config = {
       boxShadow: {
         'soft': '0 2px 8px -2px rgba(0, 0, 0, 0.08), 0 4px 16px -4px rgba(0, 0, 0, 0.08)',
         'medium': '0 4px 12px -2px rgba(0, 0, 0, 0.12), 0 8px 24px -4px rgba(0, 0, 0, 0.12)',
+        // Premium glass shadows
+        'glass': '0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04)',
+        'glass-hover': '0 12px 40px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.06)',
+        'glass-inset': 'inset 0 1px 1px rgba(255, 255, 255, 0.4), inset 0 -1px 1px rgba(0, 0, 0, 0.05)',
+        'card-elevated': '0 20px 50px -12px rgba(0, 0, 0, 0.15), 0 8px 20px -8px rgba(0, 0, 0, 0.1)',
+        'glow-primary': '0 0 20px rgba(90, 108, 242, 0.3), 0 0 40px rgba(90, 108, 242, 0.1)',
+        'glow-success': '0 0 20px rgba(16, 185, 129, 0.3), 0 0 40px rgba(16, 185, 129, 0.1)',
+        'glow-warning': '0 0 20px rgba(245, 158, 11, 0.3), 0 0 40px rgba(245, 158, 11, 0.1)',
+      },
+      backdropBlur: {
+        'xs': '2px',
+        'glass': '12px',
+        'heavy': '20px',
       },
       animation: {
         'fade-in': 'fadeIn 0.2s ease-out',
         'slide-up': 'slideUp 0.3s ease-out',
         'slide-down': 'slideDown 0.3s ease-out',
+        // Premium animations
+        'float': 'float 3s ease-in-out infinite',
+        'shimmer': 'shimmer 2s linear infinite',
+        'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
+        'scale-in': 'scaleIn 0.2s ease-out',
+        'card-hover': 'cardHover 0.3s ease-out forwards',
+        'drag-start': 'dragStart 0.15s ease-out forwards',
       },
       keyframes: {
         fadeIn: {
@@ -77,6 +97,30 @@ const config: Config = {
         slideDown: {
           '0%': { transform: 'translateY(-10px)', opacity: '0' },
           '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        float: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-4px)' },
+        },
+        shimmer: {
+          '0%': { backgroundPosition: '-200% 0' },
+          '100%': { backgroundPosition: '200% 0' },
+        },
+        pulseSoft: {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.7' },
+        },
+        scaleIn: {
+          '0%': { transform: 'scale(0.95)', opacity: '0' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
+        },
+        cardHover: {
+          '0%': { transform: 'translateY(0)' },
+          '100%': { transform: 'translateY(-2px)' },
+        },
+        dragStart: {
+          '0%': { transform: 'scale(1)', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)' },
+          '100%': { transform: 'scale(1.02)', boxShadow: '0 20px 50px rgba(0, 0, 0, 0.15)' },
         },
       },
     },

@@ -54,19 +54,26 @@ export function Modal({
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       onClick={(e) => e.target === overlayRef.current && onClose()}
     >
-      {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/50 animate-fade-in" />
+      {/* Backdrop with blur */}
+      <div className="fixed inset-0 bg-surface-900/40 backdrop-blur-sm animate-fade-in" />
 
-      {/* Modal */}
+      {/* Modal with glass effect */}
       <div
         className={cn(
-          'relative z-10 w-full rounded-xl bg-white shadow-xl animate-slide-up',
+          'relative z-10 w-full animate-scale-in',
+          'rounded-2xl overflow-hidden',
+          'bg-white/95 backdrop-blur-md',
+          'border border-white/60',
+          'shadow-card-elevated',
           sizes[size]
         )}
       >
+        {/* Subtle gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-br from-white/40 via-transparent to-transparent pointer-events-none" />
+
         {/* Header */}
         {(title || description) && (
-          <div className="border-b border-surface-200 px-6 py-4">
+          <div className="relative border-b border-surface-100 px-6 py-5">
             <div className="flex items-start justify-between">
               <div>
                 {title && (
@@ -80,7 +87,12 @@ export function Modal({
               </div>
               <button
                 onClick={onClose}
-                className="rounded-lg p-1.5 text-surface-400 hover:bg-surface-100 hover:text-surface-600"
+                className={cn(
+                  'rounded-xl p-2 -mr-1 -mt-1',
+                  'text-surface-400 hover:text-surface-600',
+                  'hover:bg-surface-100/80',
+                  'transition-all duration-200'
+                )}
               >
                 <X className="h-5 w-5" />
               </button>
@@ -89,7 +101,7 @@ export function Modal({
         )}
 
         {/* Content */}
-        <div className="px-6 py-4">{children}</div>
+        <div className="relative px-6 py-5">{children}</div>
       </div>
     </div>
   );
@@ -104,7 +116,11 @@ export function ModalFooter({ children, className }: ModalFooterProps) {
   return (
     <div
       className={cn(
-        'flex justify-end gap-3 border-t border-surface-200 bg-surface-50 px-6 py-4 -mx-6 -mb-4 mt-4 rounded-b-xl',
+        'flex justify-end gap-3',
+        'border-t border-surface-100',
+        'bg-surface-50/50 backdrop-blur-sm',
+        'px-6 py-4 -mx-6 -mb-5 mt-5',
+        'rounded-b-2xl',
         className
       )}
     >
@@ -112,4 +128,3 @@ export function ModalFooter({ children, className }: ModalFooterProps) {
     </div>
   );
 }
-

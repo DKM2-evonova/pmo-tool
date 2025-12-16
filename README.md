@@ -33,14 +33,49 @@ The PMO Tool is an automation layer that sits on top of an organization's existi
 
 ## Tech Stack
 
-- **Frontend**: Next.js 16 + Tailwind CSS
+- **Frontend**: Next.js 16 + Tailwind CSS + Liquid Glass Design System
 - **Backend**: Supabase (Postgres + RLS + pgvector)
-- **LLM**: 
+- **LLM**:
   - Primary: Gemini 3 Pro Preview (recaps, decisions, risk analysis)
   - Fallback: OpenAI GPT-4o (used if Gemini fails)
   - Utility: Gemini Flash (formatting, JSON validation/repair)
 - **Deployment**: Google Cloud Run
 - **Authentication**: Supabase Auth with Google/Microsoft OAuth support
+
+## UI Design System
+
+The application features a premium **Liquid Glass** design system with modern glassmorphism effects:
+
+### Key Design Elements
+
+- **Glass Panels**: Frosted glass containers with backdrop blur and subtle gradients
+- **Glass Cards**: Elevated cards with hover effects and drag-and-drop support
+- **Premium Shadows**: Layered shadows including `shadow-glass`, `shadow-card-elevated`, and glow effects
+- **Smooth Animations**: Scale, fade, float, and shimmer effects for polished interactions
+- **Status Indicators**: Glowing status dots with pulse animations for active states
+
+### CSS Utilities
+
+The design system provides reusable utility classes in `globals.css`:
+
+```css
+.glass-panel      /* Frosted glass containers */
+.glass-card       /* Draggable cards with hover states */
+.glass-column     /* Kanban columns with color accents */
+.glass-badge      /* Small frosted badges */
+.glass-avatar     /* Gradient avatars with glow */
+.status-dot-*     /* Glowing status indicators */
+.due-chip         /* Date chips with overdue states */
+.empty-drop-zone  /* Empty state drop targets */
+```
+
+### Tailwind Extensions
+
+Custom theme extensions in `tailwind.config.ts`:
+
+- **Shadows**: `shadow-glass`, `shadow-glass-hover`, `shadow-card-elevated`, `glow-primary/success/warning`
+- **Animations**: `animate-float`, `animate-shimmer`, `animate-pulse-soft`, `animate-scale-in`
+- **Backdrop Blur**: `backdrop-blur-glass`, `backdrop-blur-heavy`
 
 ## Getting Started
 

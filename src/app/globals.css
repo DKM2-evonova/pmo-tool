@@ -55,6 +55,223 @@
     @apply card transition-all duration-200 hover:border-surface-300 hover:shadow-medium;
   }
 
+  /* ========================================
+     Premium Liquid Glass Design System
+     ======================================== */
+
+  /* Glass Panel - Base frosted glass effect */
+  .glass-panel {
+    @apply relative overflow-hidden rounded-2xl;
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.9) 0%,
+      rgba(255, 255, 255, 0.7) 50%,
+      rgba(255, 255, 255, 0.85) 100%
+    );
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.08),
+      0 2px 8px rgba(0, 0, 0, 0.04),
+      inset 0 1px 1px rgba(255, 255, 255, 0.6);
+  }
+
+  .glass-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.4) 0%,
+      transparent 50%,
+      rgba(255, 255, 255, 0.1) 100%
+    );
+    pointer-events: none;
+  }
+
+  /* Glass Card - For draggable items */
+  .glass-card {
+    @apply relative overflow-hidden rounded-xl transition-all duration-300;
+    background: linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.95) 0%,
+      rgba(255, 255, 255, 0.85) 100%
+    );
+    backdrop-filter: blur(8px) saturate(150%);
+    -webkit-backdrop-filter: blur(8px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    box-shadow:
+      0 4px 24px rgba(0, 0, 0, 0.06),
+      0 1px 4px rgba(0, 0, 0, 0.04),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+
+  .glass-card:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 12px 40px rgba(0, 0, 0, 0.1),
+      0 4px 12px rgba(0, 0, 0, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    border-color: rgba(255, 255, 255, 0.9);
+  }
+
+  .glass-card.dragging {
+    transform: scale(1.02) rotate(1deg);
+    box-shadow:
+      0 20px 60px rgba(0, 0, 0, 0.15),
+      0 8px 24px rgba(0, 0, 0, 0.1);
+    z-index: 100;
+  }
+
+  /* Glass Column - Kanban columns */
+  .glass-column {
+    @apply relative overflow-hidden rounded-2xl p-5;
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.6) 0%,
+      rgba(255, 255, 255, 0.4) 100%
+    );
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    box-shadow:
+      0 4px 30px rgba(0, 0, 0, 0.05),
+      inset 0 1px 1px rgba(255, 255, 255, 0.6);
+  }
+
+  .glass-column.drop-active {
+    border-color: rgba(90, 108, 242, 0.5);
+    box-shadow:
+      0 4px 30px rgba(0, 0, 0, 0.05),
+      0 0 0 2px rgba(90, 108, 242, 0.2),
+      inset 0 1px 1px rgba(255, 255, 255, 0.6);
+  }
+
+  /* Column Color Accents */
+  .glass-column-open {
+    background: linear-gradient(
+      180deg,
+      rgba(244, 244, 245, 0.7) 0%,
+      rgba(244, 244, 245, 0.5) 100%
+    );
+  }
+
+  .glass-column-progress {
+    background: linear-gradient(
+      180deg,
+      rgba(255, 251, 235, 0.7) 0%,
+      rgba(254, 243, 199, 0.5) 100%
+    );
+  }
+
+  .glass-column-closed {
+    background: linear-gradient(
+      180deg,
+      rgba(236, 253, 245, 0.7) 0%,
+      rgba(209, 250, 229, 0.5) 100%
+    );
+  }
+
+  /* Glass Badge */
+  .glass-badge {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold;
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  }
+
+  /* Avatar with glass ring */
+  .glass-avatar {
+    @apply relative flex items-center justify-center rounded-full font-semibold;
+    background: linear-gradient(135deg, #5a6cf2 0%, #4249e6 100%);
+    box-shadow:
+      0 2px 8px rgba(90, 108, 242, 0.3),
+      inset 0 1px 1px rgba(255, 255, 255, 0.3);
+  }
+
+  .glass-avatar-ring {
+    @apply absolute -inset-0.5 rounded-full;
+    background: linear-gradient(135deg, rgba(255,255,255,0.5), transparent);
+    z-index: -1;
+  }
+
+  /* Status indicators with glow */
+  .status-dot {
+    @apply w-2 h-2 rounded-full;
+    box-shadow: 0 0 8px currentColor;
+  }
+
+  .status-dot-open {
+    @apply bg-surface-400;
+    box-shadow: 0 0 8px rgba(161, 161, 170, 0.5);
+  }
+
+  .status-dot-progress {
+    @apply bg-warning-500;
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+    animation: pulseSoft 2s ease-in-out infinite;
+  }
+
+  .status-dot-closed {
+    @apply bg-success-500;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+  }
+
+  /* Shimmer effect for loading states */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.4) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+
+  /* Due date chip styles */
+  .due-chip {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all;
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+  }
+
+  .due-chip-overdue {
+    background: rgba(254, 242, 242, 0.8);
+    border-color: rgba(239, 68, 68, 0.2);
+    color: #dc2626;
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.15);
+  }
+
+  /* Empty state styling */
+  .empty-drop-zone {
+    @apply relative rounded-xl p-6 text-center transition-all duration-300;
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.3) 0%,
+      rgba(255, 255, 255, 0.1) 100%
+    );
+    border: 2px dashed rgba(0, 0, 0, 0.08);
+  }
+
+  .empty-drop-zone.drop-active {
+    background: linear-gradient(
+      135deg,
+      rgba(90, 108, 242, 0.1) 0%,
+      rgba(90, 108, 242, 0.05) 100%
+    );
+    border-color: rgba(90, 108, 242, 0.3);
+  }
+
+  /* Keyframes defined in tailwind config are available here */
+  @keyframes pulseSoft {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50;
   }
