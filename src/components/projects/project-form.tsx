@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Button, Input } from '@/components/ui';
 import { Plus, Trash2, Calendar } from 'lucide-react';
 import { generateId } from '@/lib/utils';
+import { MilestoneStatus } from '@/types/enums';
 import type { Milestone } from '@/types/database';
 
 interface ProjectFormProps {
@@ -39,7 +40,7 @@ export function ProjectForm({ project }: ProjectFormProps) {
         id: generateId(),
         name: '',
         target_date: null,
-        completed: false,
+        status: MilestoneStatus.NotStarted,
       },
     ]);
   };
@@ -213,6 +214,19 @@ export function ProjectForm({ project }: ProjectFormProps) {
                 key={milestone.id}
                 className="flex items-center gap-3 rounded-lg border border-surface-200 p-3"
               >
+                <select
+                  value={milestone.status}
+                  onChange={(e) =>
+                    handleMilestoneChange(milestone.id, 'status', e.target.value)
+                  }
+                  className="input w-36"
+                >
+                  {Object.values(MilestoneStatus).map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
                 <input
                   type="text"
                   value={milestone.name}

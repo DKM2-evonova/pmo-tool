@@ -11,9 +11,30 @@ import {
   Plus,
 } from 'lucide-react';
 import { formatDateReadable } from '@/lib/utils';
+import { MilestoneList } from '@/components/projects/milestone-list';
+import { MilestoneStatus } from '@/types/enums';
+import type { Milestone } from '@/types/database';
 
 interface ProjectPageProps {
   params: Promise<{ projectId: string }>;
+}
+
+// Normalize milestones to handle migration from old 'completed' boolean to new 'status' field
+function normalizeMilestones(milestones: unknown): Milestone[] {
+  if (!milestones || !Array.isArray(milestones)) {
+    return [];
+  }
+  return milestones.map((m: Record<string, unknown>) => ({
+    id: String(m.id || ''),
+    name: String(m.name || ''),
+    target_date: m.target_date ? String(m.target_date) : null,
+    // Handle both old 'completed' boolean and new 'status' field
+    status: m.status
+      ? (m.status as Milestone['status'])
+      : m.completed
+        ? MilestoneStatus.Complete
+        : MilestoneStatus.NotStarted,
+  }));
 }
 
 export default async function ProjectPage({ params }: ProjectPageProps) {
@@ -261,44 +282,10 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       </div>
 
       {/* Milestones */}
-      {project.milestones && (project.milestones as any[]).length > 0 && (
-        <div className="card">
-          <h2 className="mb-4 text-lg font-semibold text-surface-900">
-            Milestones
-          </h2>
-          <div className="space-y-3">
-            {(project.milestones as any[]).map((milestone) => (
-              <div
-                key={milestone.id}
-                className="flex items-center justify-between rounded-lg border border-surface-200 p-3"
-              >
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={milestone.completed}
-                    readOnly
-                    className="h-4 w-4 rounded border-surface-300 text-primary-600 focus:ring-primary-500"
-                  />
-                  <span
-                    className={
-                      milestone.completed
-                        ? 'text-surface-400 line-through'
-                        : 'text-surface-900'
-                    }
-                  >
-                    {milestone.name}
-                  </span>
-                </div>
-                {milestone.target_date && (
-                  <span className="text-sm text-surface-500">
-                    {formatDateReadable(milestone.target_date)}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <MilestoneList
+        projectId={projectId}
+        milestones={normalizeMilestones(project.milestones)}
+      />
     </div>
   );
 }

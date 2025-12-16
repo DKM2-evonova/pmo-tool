@@ -11,6 +11,7 @@ import type {
   RiskSeverity,
   EntityType,
   ToneLevel,
+  MilestoneStatus,
 } from './enums';
 
 // Base entity with common fields
@@ -39,7 +40,7 @@ export interface Milestone {
   id: string;
   name: string;
   target_date: string | null;
-  completed: boolean;
+  status: MilestoneStatus;
 }
 
 // Project membership

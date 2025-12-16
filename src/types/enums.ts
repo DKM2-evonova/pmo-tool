@@ -99,3 +99,12 @@ export const LOCK_TTL_MINUTES = 30;
 // Fallback usage alert threshold (%)
 export const FALLBACK_ALERT_THRESHOLD_PERCENT = 15;
 
+// Milestone Status
+export const MilestoneStatus = {
+  NotStarted: 'Not Started',
+  InProgress: 'In Progress',
+  BehindSchedule: 'Behind Schedule',
+  Complete: 'Complete',
+} as const;
+export type MilestoneStatus = (typeof MilestoneStatus)[keyof typeof MilestoneStatus];
+
