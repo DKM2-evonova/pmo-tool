@@ -113,10 +113,19 @@ export async function POST(
     }
 
     // Validate email format if provided
+    // RFC 5322 compliant email regex with proper TLD validation
     if (email && typeof email === 'string' && email.trim().length > 0) {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email.trim())) {
+      const trimmedEmail = email.trim();
+      // More comprehensive email validation:
+      // - Local part can contain letters, numbers, and special chars
+      // - Domain must have at least one dot
+      // - TLD must be at least 2 characters
+      const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
+      if (!emailRegex.test(trimmedEmail)) {
         return NextResponse.json({ error: 'Invalid email format' }, { status: 400 });
+      }
+      if (trimmedEmail.length > 254) {
+        return NextResponse.json({ error: 'Email address is too long' }, { status: 400 });
       }
     }
 

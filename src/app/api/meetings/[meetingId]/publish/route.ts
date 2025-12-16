@@ -6,9 +6,119 @@ import type {
   ProposedActionItem,
   ProposedDecision,
   ProposedRisk,
+  ActionItemUpdate,
+  RiskUpdate,
 } from '@/types/database';
 
 const log = loggers.publish;
+
+/**
+ * Creates an AI-generated update comment for action items or risks
+ * when they are updated or closed via meeting processing.
+ */
+interface AIUpdateParams {
+  operation: 'update' | 'close';
+  entityType: 'action_item' | 'risk';
+  existing: Record<string, unknown>;
+  updated: Record<string, unknown>;
+  evidence: { quote: string; speaker: string | null; timestamp: string | null }[];
+  meetingId: string;
+  meetingTitle: string | null;
+  publisherUserId: string;
+  publisherName: string;
+}
+
+function createAIUpdateComment(params: AIUpdateParams): ActionItemUpdate | RiskUpdate {
+  const {
+    operation,
+    entityType,
+    existing,
+    updated,
+    evidence,
+    meetingId,
+    meetingTitle,
+    publisherUserId,
+    publisherName,
+  } = params;
+
+  // Build content describing what changed
+  let content: string;
+
+  if (operation === 'close') {
+    content = 'Closed via meeting processing.';
+  } else {
+    // Build list of changes for update operation
+    const changes: string[] = [];
+
+    if (existing.status !== updated.status) {
+      changes.push(`Status: ${existing.status} → ${updated.status}`);
+    }
+    if (existing.title !== updated.title) {
+      changes.push('Title updated');
+    }
+    if (existing.description !== updated.description) {
+      changes.push('Description updated');
+    }
+
+    if (entityType === 'action_item') {
+      if (existing.due_date !== updated.due_date) {
+        changes.push(`Due date: ${existing.due_date || 'None'} → ${updated.due_date || 'None'}`);
+      }
+      if (existing.owner_name !== updated.owner_name) {
+        changes.push(`Owner: ${existing.owner_name || 'Unassigned'} → ${updated.owner_name || 'Unassigned'}`);
+      }
+    }
+
+    if (entityType === 'risk') {
+      if (existing.probability !== updated.probability) {
+        changes.push(`Probability: ${existing.probability} → ${updated.probability}`);
+      }
+      if (existing.impact !== updated.impact) {
+        changes.push(`Impact: ${existing.impact} → ${updated.impact}`);
+      }
+      if (existing.mitigation !== updated.mitigation) {
+        changes.push('Mitigation updated');
+      }
+    }
+
+    content = changes.length > 0
+      ? `Updated via meeting processing: ${changes.join('; ')}.`
+      : 'Reviewed in meeting (no changes to core fields).';
+  }
+
+  // Get the primary evidence quote (first one, truncated if too long)
+  const primaryEvidence = evidence[0];
+  const maxQuoteLength = 300;
+  let evidenceQuote: string | undefined = primaryEvidence?.quote || undefined;
+  if (evidenceQuote && evidenceQuote.length > maxQuoteLength) {
+    evidenceQuote = evidenceQuote.substring(0, maxQuoteLength) + '...';
+  }
+
+  return {
+    id: crypto.randomUUID(),
+    content,
+    created_at: new Date().toISOString(),
+    created_by_user_id: publisherUserId,
+    created_by_name: `${publisherName} (via AI)`,
+    source: 'ai_meeting_processing',
+    meeting_id: meetingId,
+    meeting_title: meetingTitle || 'Untitled Meeting',
+    evidence_quote: evidenceQuote,
+  };
+}
+
+/**
+ * Parses the existing updates array from an item, handling null/malformed data
+ */
+function parseExistingUpdates(updatesJson: string | null | undefined): unknown[] {
+  if (!updatesJson) return [];
+  try {
+    const parsed = JSON.parse(updatesJson);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 export async function POST(
   request: NextRequest,
@@ -30,6 +140,14 @@ export async function POST(
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    // Get publisher's profile for AI update attribution
+    const { data: publisherProfile } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .single();
+    const publisherName = publisherProfile?.full_name || user.email || 'Unknown';
 
     // Get meeting
     const { data: meeting, error: meetingError } = await supabase
@@ -220,7 +338,7 @@ export async function POST(
           p_after: newItem,
         });
       } else if (item.operation === 'update' && item.external_id) {
-        // Get existing item for audit
+        // Get existing item for audit and updates array
         const { data: existing } = await supabase
           .from('action_items')
           .select('*')
@@ -247,6 +365,28 @@ export async function POST(
         if (error) throw error;
         actionItemsUpdated++;
 
+        // Create AI update comment describing changes
+        const aiUpdate = createAIUpdateComment({
+          operation: 'update',
+          entityType: 'action_item',
+          existing: existing || {},
+          updated: updated || {},
+          evidence: item.evidence,
+          meetingId,
+          meetingTitle: meeting.title,
+          publisherUserId: user.id,
+          publisherName,
+        });
+
+        // Append AI comment to updates array
+        const currentUpdates = parseExistingUpdates(existing?.updates);
+        currentUpdates.push(aiUpdate);
+
+        await supabase
+          .from('action_items')
+          .update({ updates: JSON.stringify(currentUpdates) })
+          .eq('id', item.external_id);
+
         // Create evidence records
         for (const evidence of item.evidence) {
           await supabase.from('evidence').insert({
@@ -270,7 +410,7 @@ export async function POST(
           p_after: updated,
         });
       } else if (item.operation === 'close' && item.external_id) {
-        // Get existing item for audit
+        // Get existing item for audit and updates array
         const { data: existing } = await supabase
           .from('action_items')
           .select('*')
@@ -287,6 +427,40 @@ export async function POST(
 
         if (error) throw error;
         actionItemsClosed++;
+
+        // Create AI update comment for closure
+        const aiUpdate = createAIUpdateComment({
+          operation: 'close',
+          entityType: 'action_item',
+          existing: existing || {},
+          updated: updated || {},
+          evidence: item.evidence,
+          meetingId,
+          meetingTitle: meeting.title,
+          publisherUserId: user.id,
+          publisherName,
+        });
+
+        // Append AI comment to updates array
+        const currentUpdates = parseExistingUpdates(existing?.updates);
+        currentUpdates.push(aiUpdate);
+
+        await supabase
+          .from('action_items')
+          .update({ updates: JSON.stringify(currentUpdates) })
+          .eq('id', item.external_id);
+
+        // Create evidence records for the close action
+        for (const evidence of item.evidence) {
+          await supabase.from('evidence').insert({
+            entity_type: 'action_item',
+            entity_id: item.external_id,
+            meeting_id: meetingId,
+            quote: evidence.quote,
+            speaker: evidence.speaker,
+            timestamp: evidence.timestamp,
+          });
+        }
 
         // Audit log
         await serviceClient.rpc('create_audit_log', {
@@ -425,6 +599,7 @@ export async function POST(
           p_after: newItem,
         });
       } else if (item.operation === 'close' && item.external_id) {
+        // Get existing item for audit and updates array
         const { data: existing } = await supabase
           .from('risks')
           .select('*')
@@ -440,6 +615,40 @@ export async function POST(
 
         if (error) throw error;
         risksClosed++;
+
+        // Create AI update comment for closure
+        const aiUpdate = createAIUpdateComment({
+          operation: 'close',
+          entityType: 'risk',
+          existing: existing || {},
+          updated: updated || {},
+          evidence: item.evidence,
+          meetingId,
+          meetingTitle: meeting.title,
+          publisherUserId: user.id,
+          publisherName,
+        });
+
+        // Append AI comment to updates array
+        const currentUpdates = parseExistingUpdates(existing?.updates);
+        currentUpdates.push(aiUpdate);
+
+        await supabase
+          .from('risks')
+          .update({ updates: JSON.stringify(currentUpdates) })
+          .eq('id', item.external_id);
+
+        // Create evidence records for the close action
+        for (const evidence of item.evidence) {
+          await supabase.from('evidence').insert({
+            entity_type: 'risk',
+            entity_id: item.external_id,
+            meeting_id: meetingId,
+            quote: evidence.quote,
+            speaker: evidence.speaker,
+            timestamp: evidence.timestamp,
+          });
+        }
 
         // Audit log
         await serviceClient.rpc('create_audit_log', {

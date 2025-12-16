@@ -1,4 +1,4 @@
-'use client';
+import { FilterSelect } from '@/components/ui/filter-select';
 
 interface Project {
   id: string;
@@ -11,31 +11,21 @@ interface ProjectFilterProps {
 }
 
 export function ProjectFilter({ projects, currentProject }: ProjectFilterProps) {
-  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const url = new URL(window.location.href);
-    if (e.target.value) {
-      url.searchParams.set('project', e.target.value);
-    } else {
-      url.searchParams.delete('project');
-    }
-    window.location.href = url.toString();
-  };
+  const options = projects.map((p) => ({
+    id: p.id,
+    label: p.name,
+  }));
 
   return (
-    <select
-      className="input w-48"
-      defaultValue={currentProject || ''}
-      onChange={handleChange}
-    >
-      <option value="">All Projects</option>
-      {projects.map((p) => (
-        <option key={p.id} value={p.id}>
-          {p.name}
-        </option>
-      ))}
-    </select>
+    <FilterSelect
+      paramName="project"
+      options={options}
+      currentValue={currentProject}
+      placeholder="All Projects"
+    />
   );
 }
+
 
 
 

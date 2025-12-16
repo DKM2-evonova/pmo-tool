@@ -1,17 +1,38 @@
 import { NextResponse } from 'next/server';
 import { processFile } from '@/lib/file-processing';
+import { createClient } from '@/lib/supabase/server';
+import { loggers } from '@/lib/logger';
+
+const log = loggers.file;
 
 export async function GET() {
   try {
-    // Test that we can import and use the file processing functions
-    console.log('Testing file processing imports...');
+    // Authentication check - debug routes require admin
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('global_role')
+      .eq('id', user.id)
+      .single();
+
+    if (profile?.global_role !== 'admin') {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    }
+
+    log.debug('Testing file processing imports');
 
     // Create a simple test text file content
     const testText = 'This is a test transcript for debugging purposes.';
     const blob = new Blob([testText], { type: 'text/plain' });
     const testFile = new File([blob], 'test.txt', { type: 'text/plain' });
 
-    console.log('Created test file, processing...');
+    log.debug('Created test file, processing');
     const result = await processFile(testFile);
 
     return NextResponse.json({
@@ -24,14 +45,14 @@ export async function GET() {
       }
     });
   } catch (error) {
-    console.error('File processing test failed:', error);
+    log.error('File processing test failed', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined
+      error: 'File processing test failed'
     }, { status: 500 });
   }
 }
+
 
 
 

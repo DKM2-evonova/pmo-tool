@@ -170,6 +170,11 @@ export interface ActionItemUpdate {
   created_at: string;
   created_by_user_id: string;
   created_by_name: string;
+  // Optional fields for AI-generated updates
+  source?: 'user' | 'ai_meeting_processing';
+  meeting_id?: string;
+  meeting_title?: string;
+  evidence_quote?: string;
 }
 
 // Risk Update
@@ -179,6 +184,11 @@ export interface RiskUpdate {
   created_at: string;
   created_by_user_id: string;
   created_by_name: string;
+  // Optional fields for AI-generated updates
+  source?: 'user' | 'ai_meeting_processing';
+  meeting_id?: string;
+  meeting_title?: string;
+  evidence_quote?: string;
 }
 
 // Action Item

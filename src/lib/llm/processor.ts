@@ -29,10 +29,55 @@ import { loggers } from '@/lib/logger';
 const log = loggers.llm;
 
 /**
+ * Raw LLM output structure before validation
+ * This is a partial type for the cleanup process
+ */
+interface RawLLMOutput {
+  meeting?: {
+    date?: string;
+    [key: string]: unknown;
+  };
+  action_items?: Array<{
+    status?: string;
+    due_date?: string;
+    evidence?: Array<{ timestamp?: string; [key: string]: unknown }>;
+    [key: string]: unknown;
+  }>;
+  recap?: {
+    action_items_summary?: Array<{
+      status?: string;
+      due_date?: string;
+      [key: string]: unknown;
+    }>;
+    [key: string]: unknown;
+  };
+  decisions?: Array<{
+    evidence?: Array<{ timestamp?: string; [key: string]: unknown }>;
+    [key: string]: unknown;
+  }>;
+  risks?: Array<{
+    status?: string;
+    probability?: string;
+    impact?: string;
+    evidence?: Array<{ timestamp?: string; [key: string]: unknown }>;
+    [key: string]: unknown;
+  }>;
+  tone?: {
+    participants?: Array<{
+      happiness?: string;
+      buy_in?: string;
+      [key: string]: unknown;
+    }>;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+/**
  * Clean up common LLM output issues before validation
  * This handles issues that LLMs commonly produce that don't match our schema
  */
-function cleanupLLMOutput(data: any): any {
+function cleanupLLMOutput(data: unknown): RawLLMOutput | unknown {
   if (!data || typeof data !== 'object') return data;
 
   // Deep clone to avoid mutating original

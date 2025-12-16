@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Button, Badge, Input, Select } from '@/components/ui';
-import { formatDateReadable, getInitials, calculateRiskSeverity } from '@/lib/utils';
+import { formatDateReadable, getInitials, calculateRiskSeverity, cn } from '@/lib/utils';
 import {
   ArrowLeft,
   Edit3,
@@ -15,7 +16,9 @@ import {
   Calendar,
   AlertCircle,
   MessageSquare,
-  Plus
+  Plus,
+  Zap,
+  ExternalLink
 } from 'lucide-react';
 import type { RiskUpdate } from '@/types/database';
 import type { EntityStatus, RiskSeverity } from '@/types/enums';
@@ -66,7 +69,6 @@ export function RiskDetail({ risk: initialRisk, projectMembers, currentUserId }:
   const handleSave = async () => {
     setSaving(true);
     try {
-      console.log('Client: Saving risk:', risk.id);
       const response = await fetch(`/api/risks/${risk.id}/update`, {
         method: 'POST',
         headers: {
@@ -108,9 +110,9 @@ export function RiskDetail({ risk: initialRisk, projectMembers, currentUserId }:
 
       setEditing(false);
       router.refresh();
-    } catch (error: any) {
-      console.error('Failed to update risk:', error);
-      alert('Failed to update risk. Please try again.');
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Failed to update risk: ${errorMessage}`);
     } finally {
       setSaving(false);
     }
@@ -121,7 +123,6 @@ export function RiskDetail({ risk: initialRisk, projectMembers, currentUserId }:
 
     setSaving(true);
     try {
-      console.log('Client: Adding update for risk:', risk.id);
       const response = await fetch(`/api/risks/${risk.id}/update`, {
         method: 'POST',
         headers: {
@@ -412,21 +413,62 @@ export function RiskDetail({ risk: initialRisk, projectMembers, currentUserId }:
             {/* Updates list */}
             <div className="space-y-3">
               {risk.updates && risk.updates.length > 0 ? (
-                risk.updates.map((update) => (
-                  <div key={update.id} className="border-l-2 border-primary-200 pl-4 py-2">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="text-surface-900">{update.content}</p>
-                        <div className="flex items-center gap-2 mt-2 text-sm text-surface-500">
-                          <User className="h-3 w-3" />
-                          <span>{update.created_by_name}</span>
-                          <Clock className="h-3 w-3 ml-2" />
-                          <span>{formatDateReadable(update.created_at)}</span>
+                risk.updates.map((update) => {
+                  const isAIUpdate = update.source === 'ai_meeting_processing';
+
+                  return (
+                    <div
+                      key={update.id}
+                      className={cn(
+                        "border-l-2 pl-4 py-2",
+                        isAIUpdate
+                          ? "border-primary-400 bg-primary-50/50 rounded-r-lg"
+                          : "border-primary-200"
+                      )}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          {/* AI Badge and meeting link for system updates */}
+                          {isAIUpdate && (
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-700">
+                                <Zap className="h-3 w-3" />
+                                AI Update
+                              </span>
+                              {update.meeting_id && update.meeting_title && (
+                                <Link
+                                  href={`/meetings/${update.meeting_id}`}
+                                  className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-800 hover:underline"
+                                >
+                                  <ExternalLink className="h-3 w-3" />
+                                  {update.meeting_title}
+                                </Link>
+                              )}
+                            </div>
+                          )}
+
+                          <p className="text-surface-900">{update.content}</p>
+
+                          {/* Evidence quote for AI updates */}
+                          {isAIUpdate && update.evidence_quote && (
+                            <div className="mt-2 p-2 bg-surface-100 rounded-md border-l-2 border-surface-300">
+                              <p className="text-sm text-surface-600 italic">
+                                &ldquo;{update.evidence_quote}&rdquo;
+                              </p>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-2 mt-2 text-sm text-surface-500">
+                            <User className="h-3 w-3" />
+                            <span>{update.created_by_name}</span>
+                            <Clock className="h-3 w-3 ml-2" />
+                            <span>{formatDateReadable(update.created_at)}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <p className="text-surface-500 text-center py-4">
                   No status updates yet. Add the first one above.

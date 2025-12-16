@@ -74,12 +74,6 @@ export default async function ActionItemsPage({
   }
   const owners = Array.from(ownerMap.values()).sort((a, b) => a.full_name.localeCompare(b.full_name));
 
-  console.log('Action items query result:', {
-    actionItems: actionItems?.length || 0,
-    error: actionItemsError,
-    projectIds
-  });
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">

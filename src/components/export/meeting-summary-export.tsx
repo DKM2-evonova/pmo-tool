@@ -33,7 +33,7 @@ export function MeetingSummaryExport({
         format
       );
     } catch (error) {
-      console.error('Export failed:', error);
+      // Error details logged server-side if applicable
       alert('Export failed. Please try again.');
     } finally {
       setIsExporting(null);
@@ -108,6 +108,7 @@ export function MeetingSummaryExport({
     </div>
   );
 }
+
 
 
 

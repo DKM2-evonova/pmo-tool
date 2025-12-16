@@ -1,6 +1,7 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { loggers } from '@/lib/logger';
+import { isValidUUID } from '@/lib/utils';
 
 const log = loggers.api;
 
@@ -38,6 +39,11 @@ export async function POST(
   try {
     const resolvedParams = await params;
     const { id } = resolvedParams;
+
+    // Validate UUID format
+    if (!isValidUUID(id)) {
+      return NextResponse.json({ error: 'Invalid action item ID format' }, { status: 400 });
+    }
 
     log.info('Updating action item', { actionItemId: id });
 
@@ -109,12 +115,12 @@ export async function POST(
 
       if (fetchError || !actionItem) {
         log.warn('Action item not found for status update', { actionItemId: id, error: fetchError?.message });
-        return NextResponse.json({ error: `Action item not found: ${fetchError?.message || 'Unknown error'}` }, { status: 404 });
+        return NextResponse.json({ error: 'Action item not found' }, { status: 404 });
       }
 
       // Create the update
       const update = {
-        id: Date.now().toString() + Math.random().toString(36).slice(2, 11),
+        id: crypto.randomUUID(),
         content: content.trim(),
         created_at: new Date().toISOString(),
         created_by_user_id: user.id,

@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { loggers } from '@/lib/logger';
+import { isValidUUID } from '@/lib/utils';
+
+const log = loggers.api;
 
 export async function DELETE(
   request: NextRequest,
@@ -9,6 +13,11 @@ export async function DELETE(
     const supabase = await createClient();
     const serviceClient = createServiceClient();
     const { meetingId } = await params;
+
+    // Validate UUID format
+    if (!isValidUUID(meetingId)) {
+      return NextResponse.json({ error: 'Invalid meeting ID format' }, { status: 400 });
+    }
 
     const {
       data: { user },
@@ -121,7 +130,7 @@ export async function DELETE(
 
       if (deleteAuditLogsError) {
         // Don't fail the whole operation if audit log deletion fails
-        console.error('Failed to delete audit logs:', deleteAuditLogsError);
+        log.warn('Failed to delete audit logs', { meetingId, error: deleteAuditLogsError.message });
       }
     }
 
@@ -134,16 +143,15 @@ export async function DELETE(
       .single();
 
     if (updateMeetingError) {
-      console.error('Failed to update meeting status:', updateMeetingError);
-      // Check if it's an enum value error
+      log.error('Failed to update meeting status', { meetingId, error: updateMeetingError.message });
+      // Check if it's an enum value error - log details but return generic message
       if (updateMeetingError.message?.includes('enum') || updateMeetingError.message?.includes('Deleted')) {
-        throw new Error(
-          `Database migration required: The 'Deleted' status value must be added to the meeting_status enum. ` +
-          `Please run migration 00017_add_deleted_meeting_status.sql. ` +
-          `Original error: ${updateMeetingError.message}`
-        );
+        log.error('Database migration may be required', {
+          meetingId,
+          hint: 'Run migration 00017_add_deleted_meeting_status.sql'
+        });
       }
-      throw new Error(`Failed to update meeting status: ${updateMeetingError.message}`);
+      throw new Error('Failed to update meeting status');
     }
 
     if (!updatedMeeting) {
@@ -152,10 +160,12 @@ export async function DELETE(
 
     // Verify the status was actually updated
     if (updatedMeeting.status !== 'Deleted') {
-      throw new Error(
-        `Meeting status was not updated correctly. Expected 'Deleted', got '${updatedMeeting.status}'. ` +
-        `The database may not have the 'Deleted' enum value. Please run the migration.`
-      );
+      log.error('Meeting status update verification failed', {
+        meetingId,
+        expectedStatus: 'Deleted',
+        actualStatus: updatedMeeting.status
+      });
+      throw new Error('Failed to update meeting status');
     }
 
     // Create audit log for the meeting deletion
@@ -178,13 +188,14 @@ export async function DELETE(
       }
     });
   } catch (error) {
-    console.error('Meeting deletion error:', error);
+    log.error('Meeting deletion error', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
-      { error: 'Failed to delete meeting: ' + (error as Error).message },
+      { error: 'Failed to delete meeting. Please try again.' },
       { status: 500 }
     );
   }
 }
+
 
 
 

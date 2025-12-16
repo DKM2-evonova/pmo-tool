@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { loggers } from '@/lib/logger';
+
+const log = loggers.api;
 
 export async function POST() {
   try {
@@ -25,7 +28,9 @@ export async function POST() {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
 
-    // Track deletion counts
+    log.info('Starting database clear operation', { userId: user.id });
+
+    // Track deletion counts and errors
     const deletionCounts = {
       audit_logs: 0,
       llm_metrics: 0,
@@ -35,6 +40,8 @@ export async function POST() {
       risks: 0,
       meetings: 0,
     };
+
+    const errors: string[] = [];
 
     // Delete in order of dependencies (child tables first)
     // Using service client to bypass RLS for admin operations
@@ -51,7 +58,8 @@ export async function POST() {
       .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all (workaround for no .delete().all())
 
     if (auditLogsError) {
-      console.error('Error deleting audit logs:', auditLogsError);
+      log.error('Error deleting audit logs', { error: auditLogsError.message });
+      errors.push(`audit_logs: ${auditLogsError.message}`);
     }
 
     // 2. Delete LLM metrics
@@ -66,7 +74,8 @@ export async function POST() {
       .neq('id', '00000000-0000-0000-0000-000000000000');
 
     if (llmMetricsError) {
-      console.error('Error deleting LLM metrics:', llmMetricsError);
+      log.error('Error deleting LLM metrics', { error: llmMetricsError.message });
+      errors.push(`llm_metrics: ${llmMetricsError.message}`);
     }
 
     // 3. Delete evidence records
@@ -81,7 +90,8 @@ export async function POST() {
       .neq('id', '00000000-0000-0000-0000-000000000000');
 
     if (evidenceError) {
-      console.error('Error deleting evidence:', evidenceError);
+      log.error('Error deleting evidence', { error: evidenceError.message });
+      errors.push(`evidence: ${evidenceError.message}`);
     }
 
     // 4. Delete action items
@@ -96,7 +106,8 @@ export async function POST() {
       .neq('id', '00000000-0000-0000-0000-000000000000');
 
     if (actionItemsError) {
-      console.error('Error deleting action items:', actionItemsError);
+      log.error('Error deleting action items', { error: actionItemsError.message });
+      errors.push(`action_items: ${actionItemsError.message}`);
     }
 
     // 5. Delete decisions
@@ -111,7 +122,8 @@ export async function POST() {
       .neq('id', '00000000-0000-0000-0000-000000000000');
 
     if (decisionsError) {
-      console.error('Error deleting decisions:', decisionsError);
+      log.error('Error deleting decisions', { error: decisionsError.message });
+      errors.push(`decisions: ${decisionsError.message}`);
     }
 
     // 6. Delete risks
@@ -126,7 +138,8 @@ export async function POST() {
       .neq('id', '00000000-0000-0000-0000-000000000000');
 
     if (risksError) {
-      console.error('Error deleting risks:', risksError);
+      log.error('Error deleting risks', { error: risksError.message });
+      errors.push(`risks: ${risksError.message}`);
     }
 
     // 7. Delete meetings (hard delete all meetings)
@@ -141,7 +154,8 @@ export async function POST() {
       .neq('id', '00000000-0000-0000-0000-000000000000');
 
     if (meetingsError) {
-      console.error('Error deleting meetings:', meetingsError);
+      log.error('Error deleting meetings', { error: meetingsError.message });
+      errors.push(`meetings: ${meetingsError.message}`);
     }
 
     // Create audit log for this operation
@@ -152,18 +166,30 @@ export async function POST() {
       p_entity_id: user.id,
       p_project_id: null,
       p_before: { operation: 'clear_database', counts: deletionCounts },
-      p_after: { cleared: true },
+      p_after: { cleared: true, errors: errors.length > 0 ? errors : undefined },
     });
 
+    // Return partial success if there were errors
+    if (errors.length > 0) {
+      log.warn('Database clear completed with errors', { errors, deletionCounts });
+      return NextResponse.json({
+        success: false,
+        message: 'Database clear completed with errors',
+        deleted: deletionCounts,
+        errors,
+      }, { status: 207 }); // 207 Multi-Status
+    }
+
+    log.info('Database clear completed successfully', { deletionCounts });
     return NextResponse.json({
       success: true,
       message: 'Database cleared successfully',
       deleted: deletionCounts,
     });
   } catch (error) {
-    console.error('Database clear error:', error);
+    log.error('Database clear failed', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
-      { error: 'Failed to clear database: ' + (error as Error).message },
+      { error: 'Failed to clear database. Please try again.' },
       { status: 500 }
     );
   }

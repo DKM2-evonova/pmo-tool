@@ -52,7 +52,7 @@ export async function updateSession(request: NextRequest) {
 
   // Handle auth errors on protected routes
   if (authError && !isPublicRoute) {
-    console.error('Auth error:', authError.message);
+    // Auth errors are expected when session expires - redirect silently
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);
