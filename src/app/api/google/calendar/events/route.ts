@@ -29,11 +29,24 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const mode = searchParams.get('mode') || 'recent';
-    const daysBack = parseInt(searchParams.get('daysBack') || '14', 10);
-    const daysAhead = parseInt(searchParams.get('daysAhead') || '7', 10);
+    const pageToken = searchParams.get('pageToken') || undefined;
+
+    // Parse and validate day ranges with bounds checking to prevent DoS
+    const MAX_DAYS = 90; // Maximum allowed range
+    const MIN_DAYS = 1;
+
+    let daysBack = parseInt(searchParams.get('daysBack') || '14', 10);
+    let daysAhead = parseInt(searchParams.get('daysAhead') || '7', 10);
+
+    // Validate and clamp values to prevent abuse
+    if (isNaN(daysBack) || daysBack < MIN_DAYS) daysBack = MIN_DAYS;
+    if (daysBack > MAX_DAYS) daysBack = MAX_DAYS;
+
+    if (isNaN(daysAhead) || daysAhead < MIN_DAYS) daysAhead = MIN_DAYS;
+    if (daysAhead > MAX_DAYS) daysAhead = MAX_DAYS;
+
     const timeMin = searchParams.get('timeMin');
     const timeMax = searchParams.get('timeMax');
-    const pageToken = searchParams.get('pageToken') || undefined;
 
     let result;
 

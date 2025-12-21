@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getAuthorizationUrl } from '@/lib/google/oauth';
+import crypto from 'crypto';
 
 /**
  * GET /api/google/calendar/auth
@@ -27,11 +28,27 @@ export async function GET() {
       );
     }
 
-    // Generate state parameter for CSRF protection (includes user ID)
+    // Generate cryptographically secure state token for CSRF protection
+    // The token is random and unpredictable, then we encode user info with HMAC signature
+    const stateToken = crypto.randomUUID();
+    const timestamp = Date.now();
+
+    // Create HMAC signature to prevent tampering
+    const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || 'fallback-secret';
+    const dataToSign = `${stateToken}:${user.id}:${timestamp}`;
+    const signature = crypto
+      .createHmac('sha256', secret)
+      .update(dataToSign)
+      .digest('hex')
+      .substring(0, 16); // Use first 16 chars of signature
+
+    // Encode state with signature for verification
     const state = Buffer.from(JSON.stringify({
+      token: stateToken,
       userId: user.id,
-      timestamp: Date.now(),
-    })).toString('base64');
+      timestamp,
+      sig: signature,
+    })).toString('base64url'); // Use base64url for URL safety
 
     // Get the authorization URL
     const authUrl = getAuthorizationUrl(state);

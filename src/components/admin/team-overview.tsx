@@ -212,6 +212,7 @@ export function TeamOverview({ projects }: TeamOverviewProps) {
                             disabled={deletingProjectId === project.id}
                             className="inline-flex items-center gap-1 text-sm text-danger-600 hover:text-danger-700 disabled:opacity-50"
                             title="Delete project"
+                            aria-label={`Delete project ${project.name}`}
                           >
                             <Trash2 className="h-4 w-4" />
                             {deletingProjectId === project.id ? 'Deleting...' : 'Delete'}

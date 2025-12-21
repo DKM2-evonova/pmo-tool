@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Search, MoreVertical, Shield, User, Users } from 'lucide-react';
+import { Search, MoreVertical, Shield, User, Users, XCircle } from 'lucide-react';
 import { cn, getInitials, formatDateReadable } from '@/lib/utils';
 import type { Profile } from '@/types/database';
 import type { GlobalRole } from '@/types/enums';
@@ -26,6 +26,15 @@ export function UserManagement({ users }: UserManagementProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Auto-dismiss error after 5 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
 
   const filteredUsers = users.filter(
     (user) =>
@@ -53,18 +62,19 @@ export function UserManagement({ users }: UserManagementProps) {
 
   const handleRoleChange = async (userId: string, newRole: GlobalRole) => {
     setIsUpdating(true);
+    setError(null);
     try {
-      const { error } = await supabase
+      const { error: updateError } = await supabase
         .from('profiles')
         .update({ global_role: newRole })
         .eq('id', userId);
 
-      if (error) throw error;
+      if (updateError) throw updateError;
       router.refresh();
       setSelectedUser(null);
-    } catch (error) {
-      console.error('Error updating role:', error);
-      alert('Failed to update user role');
+    } catch (err) {
+      console.error('Error updating role:', err);
+      setError('Failed to update user role. Please try again.');
     } finally {
       setIsUpdating(false);
     }
@@ -72,6 +82,21 @@ export function UserManagement({ users }: UserManagementProps) {
 
   return (
     <div className="card">
+      {/* Error Toast */}
+      {error && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-700">
+          <XCircle className="h-4 w-4 flex-shrink-0" />
+          <span>{error}</span>
+          <button
+            onClick={() => setError(null)}
+            className="ml-auto rounded p-1 hover:bg-danger-100"
+            aria-label="Dismiss error"
+          >
+            <XCircle className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* Search */}
       <div className="mb-6">
         <div className="relative">
@@ -178,6 +203,7 @@ export function UserManagement({ users }: UserManagementProps) {
                           )
                         }
                         className="rounded-lg p-2 text-surface-400 opacity-0 transition-opacity hover:bg-surface-100 hover:text-surface-600 group-hover:opacity-100"
+                        aria-label="User actions menu"
                       >
                         <MoreVertical className="h-4 w-4" />
                       </button>
@@ -234,7 +260,4 @@ export function UserManagement({ users }: UserManagementProps) {
     </div>
   );
 }
-
-// Need to import React for createElement
-import React from 'react';
 

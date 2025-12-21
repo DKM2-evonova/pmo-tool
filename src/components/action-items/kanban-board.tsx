@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { formatDateReadable, isOverdue, getInitials, cn } from '@/lib/utils';
-import { AlertCircle, GripVertical, Calendar, User, ArrowRight } from 'lucide-react';
+import { AlertCircle, GripVertical, Calendar, ArrowRight, XCircle } from 'lucide-react';
 import type { ActionItemWithOwner } from '@/types/database';
 import type { EntityStatus } from '@/types/enums';
 
@@ -24,10 +24,19 @@ export function KanbanBoard({ actionItems }: KanbanBoardProps) {
   const [items, setItems] = useState<ActionItemWithOwner[]>(actionItems);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<EntityStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setItems(actionItems);
   }, [actionItems]);
+
+  // Auto-dismiss error after 5 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
 
   const handleDragStart = (e: React.DragEvent, itemId: string) => {
     setDraggingId(itemId);
@@ -76,20 +85,20 @@ export function KanbanBoard({ actionItems }: KanbanBoardProps) {
     );
 
     try {
-      const { error } = await supabase
+      const { error: updateError } = await supabase
         .from('action_items')
         .update({ status: newStatus })
         .eq('id', itemId);
 
-      if (error) throw error;
-    } catch (error) {
-      console.error('Failed to update status:', error);
+      if (updateError) throw updateError;
+    } catch (err) {
+      console.error('Failed to update status:', err);
       setItems((prev) =>
         prev.map((ai) =>
           ai.id === itemId ? { ...ai, status: previousStatus } : ai
         )
       );
-      alert('Failed to update status');
+      setError('Failed to update status. Please try again.');
     }
   };
 
@@ -98,6 +107,21 @@ export function KanbanBoard({ actionItems }: KanbanBoardProps) {
 
   return (
     <div className="relative">
+      {/* Error Toast */}
+      {error && (
+        <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-lg bg-danger-600 px-4 py-3 text-sm text-white shadow-lg animate-fade-in">
+          <XCircle className="h-4 w-4 flex-shrink-0" />
+          <span>{error}</span>
+          <button
+            onClick={() => setError(null)}
+            className="ml-2 rounded p-1 hover:bg-danger-500"
+            aria-label="Dismiss error"
+          >
+            <XCircle className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* Subtle background gradient for depth */}
       <div className="absolute inset-0 -z-10 overflow-hidden rounded-3xl">
         <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-primary-100/30 blur-3xl" />

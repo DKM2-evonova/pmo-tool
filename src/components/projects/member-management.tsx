@@ -177,6 +177,7 @@ export function MemberManagement({
                     <button
                       onClick={() => handleRemoveMember(member.user_id)}
                       className="rounded-lg p-2 text-surface-400 hover:bg-surface-100 hover:text-danger-500"
+                      aria-label={`Remove ${(member.profile as MemberProfile | null)?.full_name || 'member'} from project`}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>

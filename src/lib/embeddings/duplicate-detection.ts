@@ -202,6 +202,7 @@ export async function checkRiskDuplicate(
 
 /**
  * Batch check duplicates for proposed items
+ * Uses Promise.all for parallel processing to improve performance
  */
 export async function checkProposedItemsDuplicates(
   proposedItems: {
@@ -215,12 +216,12 @@ export async function checkProposedItemsDuplicates(
   Map<string, { duplicate_of: string | null; similarity_score: number | null }>
 > {
   const startTime = Date.now();
-  const totalItems = 
-    proposedItems.action_items.length + 
-    proposedItems.decisions.length + 
+  const totalItems =
+    proposedItems.action_items.length +
+    proposedItems.decisions.length +
     proposedItems.risks.length;
-  
-  log.info('Starting batch duplicate detection', {
+
+  log.info('Starting batch duplicate detection (parallel)', {
     projectId,
     actionItemCount: proposedItems.action_items.length,
     decisionCount: proposedItems.decisions.length,
@@ -232,67 +233,88 @@ export async function checkProposedItemsDuplicates(
     string,
     { duplicate_of: string | null; similarity_score: number | null }
   >();
-  let duplicatesFound = 0;
 
-  // Check action items
-  for (const item of proposedItems.action_items) {
+  // Create all check promises in parallel
+  const actionItemChecks = proposedItems.action_items.map(async (item) => {
     const check = await checkActionItemDuplicate(
       item.title,
       item.description,
       projectId,
       threshold
     );
-    if (check.isDuplicate && check.candidates[0]) {
-      results.set(item.temp_id, {
-        duplicate_of: check.candidates[0].id,
-        similarity_score: check.candidates[0].similarity,
-      });
-      duplicatesFound++;
-    } else {
-      results.set(item.temp_id, { duplicate_of: null, similarity_score: null });
-    }
-  }
+    return { temp_id: item.temp_id, check };
+  });
 
-  // Check decisions
-  for (const item of proposedItems.decisions) {
+  const decisionChecks = proposedItems.decisions.map(async (item) => {
     const check = await checkDecisionDuplicate(
       item.title,
       item.rationale,
       projectId,
       threshold
     );
-    if (check.isDuplicate && check.candidates[0]) {
-      results.set(item.temp_id, {
-        duplicate_of: check.candidates[0].id,
-        similarity_score: check.candidates[0].similarity,
-      });
-      duplicatesFound++;
-    } else {
-      results.set(item.temp_id, { duplicate_of: null, similarity_score: null });
-    }
-  }
+    return { temp_id: item.temp_id, check };
+  });
 
-  // Check risks
-  for (const item of proposedItems.risks) {
+  const riskChecks = proposedItems.risks.map(async (item) => {
     const check = await checkRiskDuplicate(
       item.title,
       item.description,
       projectId,
       threshold
     );
+    return { temp_id: item.temp_id, check };
+  });
+
+  // Execute all checks in parallel
+  const [actionItemResults, decisionResults, riskResults] = await Promise.all([
+    Promise.all(actionItemChecks),
+    Promise.all(decisionChecks),
+    Promise.all(riskChecks),
+  ]);
+
+  let duplicatesFound = 0;
+
+  // Process action item results
+  for (const { temp_id, check } of actionItemResults) {
     if (check.isDuplicate && check.candidates[0]) {
-      results.set(item.temp_id, {
+      results.set(temp_id, {
         duplicate_of: check.candidates[0].id,
         similarity_score: check.candidates[0].similarity,
       });
       duplicatesFound++;
     } else {
-      results.set(item.temp_id, { duplicate_of: null, similarity_score: null });
+      results.set(temp_id, { duplicate_of: null, similarity_score: null });
+    }
+  }
+
+  // Process decision results
+  for (const { temp_id, check } of decisionResults) {
+    if (check.isDuplicate && check.candidates[0]) {
+      results.set(temp_id, {
+        duplicate_of: check.candidates[0].id,
+        similarity_score: check.candidates[0].similarity,
+      });
+      duplicatesFound++;
+    } else {
+      results.set(temp_id, { duplicate_of: null, similarity_score: null });
+    }
+  }
+
+  // Process risk results
+  for (const { temp_id, check } of riskResults) {
+    if (check.isDuplicate && check.candidates[0]) {
+      results.set(temp_id, {
+        duplicate_of: check.candidates[0].id,
+        similarity_score: check.candidates[0].similarity,
+      });
+      duplicatesFound++;
+    } else {
+      results.set(temp_id, { duplicate_of: null, similarity_score: null });
     }
   }
 
   const durationMs = Date.now() - startTime;
-  log.info('Batch duplicate detection complete', {
+  log.info('Batch duplicate detection complete (parallel)', {
     projectId,
     totalItems,
     duplicatesFound,

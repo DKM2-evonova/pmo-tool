@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { MilestoneStatus } from '@/types/enums';
 import type { Milestone } from '@/types/database';
+import { isValidUUID } from '@/lib/utils';
 
 // PUT - Update project milestones
 export async function PUT(
@@ -12,12 +13,26 @@ export async function PUT(
     const resolvedParams = await params;
     const { projectId } = resolvedParams;
 
+    // Validate projectId is a valid UUID
+    if (!isValidUUID(projectId)) {
+      return NextResponse.json({ error: 'Invalid project ID' }, { status: 400 });
+    }
+
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    // Check user's role for admin override
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('global_role')
+      .eq('id', user.id)
+      .single();
+
+    const isAdmin = profile?.global_role === 'admin';
 
     // Check user is a member of the project
     const { data: membership } = await supabase
@@ -27,9 +42,10 @@ export async function PUT(
       .eq('user_id', user.id)
       .single();
 
-    if (!membership) {
+    // Allow access if user is admin OR a project member
+    if (!isAdmin && !membership) {
       return NextResponse.json(
-        { error: 'Forbidden - You must be a project member to update milestones' },
+        { error: 'Forbidden - You must be a project member or admin to update milestones' },
         { status: 403 }
       );
     }

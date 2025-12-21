@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button, Input } from '@/components/ui';
-import { User } from 'lucide-react';
+import { CheckCircle, XCircle } from 'lucide-react';
 import { getInitials } from '@/lib/utils';
 import type { Profile } from '@/types/database';
 
@@ -19,10 +19,12 @@ export function ProfileForm({ profile }: ProfileFormProps) {
   const [formData, setFormData] = useState({
     full_name: profile?.full_name || '',
   });
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setMessage(null);
 
     try {
       const { error } = await supabase
@@ -33,10 +35,10 @@ export function ProfileForm({ profile }: ProfileFormProps) {
       if (error) throw error;
 
       router.refresh();
-      alert('Profile updated successfully');
+      setMessage({ type: 'success', text: 'Profile updated successfully' });
     } catch (error) {
       console.error('Error updating profile:', error);
-      alert('Failed to update profile');
+      setMessage({ type: 'error', text: 'Failed to update profile' });
     } finally {
       setIsSubmitting(false);
     }
@@ -98,6 +100,23 @@ export function ProfileForm({ profile }: ProfileFormProps) {
           disabled
           helperText="Contact an administrator to change your role"
         />
+
+        {message && (
+          <div
+            className={`flex items-center gap-2 rounded-lg p-3 text-sm ${
+              message.type === 'success'
+                ? 'bg-success-50 text-success-700'
+                : 'bg-danger-50 text-danger-700'
+            }`}
+          >
+            {message.type === 'success' ? (
+              <CheckCircle className="h-4 w-4" />
+            ) : (
+              <XCircle className="h-4 w-4" />
+            )}
+            {message.text}
+          </div>
+        )}
 
         <div className="flex justify-end border-t border-surface-200 pt-6">
           <Button type="submit" isLoading={isSubmitting}>

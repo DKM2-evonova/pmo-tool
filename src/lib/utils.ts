@@ -2,6 +2,12 @@ import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 /**
+ * Pre-compiled UUID regex for performance (compiled once at module load)
+ * Matches UUID versions 1-5
+ */
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
  * Merge Tailwind classes with clsx
  */
 export function cn(...inputs: ClassValue[]) {
@@ -159,10 +165,10 @@ export async function retry<T>(
 
 /**
  * Validate UUID format
- * Returns true if the string is a valid UUID v4 format
+ * Returns true if the string is a valid UUID v1-5 format
+ * Uses pre-compiled regex for performance
  */
 export function isValidUUID(id: string): boolean {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(id);
+  return UUID_REGEX.test(id);
 }
 

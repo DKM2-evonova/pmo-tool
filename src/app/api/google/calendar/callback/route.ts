@@ -2,6 +2,35 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { exchangeCodeForTokens, storeTokens } from '@/lib/google/oauth';
 import { getUserEmail } from '@/lib/google/calendar-client';
+import crypto from 'crypto';
+
+/**
+ * Verifies the HMAC signature of the OAuth state parameter
+ */
+function verifyStateSignature(
+  token: string,
+  userId: string,
+  timestamp: number,
+  providedSignature: string
+): boolean {
+  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || 'fallback-secret';
+  const dataToSign = `${token}:${userId}:${timestamp}`;
+  const expectedSignature = crypto
+    .createHmac('sha256', secret)
+    .update(dataToSign)
+    .digest('hex')
+    .substring(0, 16);
+
+  // Use timing-safe comparison to prevent timing attacks
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(providedSignature),
+      Buffer.from(expectedSignature)
+    );
+  } catch {
+    return false;
+  }
+}
 
 /**
  * GET /api/google/calendar/callback
@@ -39,32 +68,59 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Verify state parameter (CSRF protection)
-    if (state) {
+    // Verify state parameter (CSRF protection with HMAC signature)
+    if (!state) {
+      console.error('Missing state parameter');
+      return NextResponse.redirect(
+        new URL('/settings?error=calendar_auth_failed', request.url)
+      );
+    }
+
+    try {
+      // Try base64url first (new format), fall back to base64 (old format)
+      let stateData;
       try {
-        const stateData = JSON.parse(Buffer.from(state, 'base64').toString());
-
-        // Verify the state is for this user
-        if (stateData.userId !== user.id) {
-          console.error('State user ID mismatch');
-          return NextResponse.redirect(
-            new URL('/settings?error=calendar_auth_failed', request.url)
-          );
-        }
-
-        // Verify state is not too old (5 minutes)
-        if (Date.now() - stateData.timestamp > 5 * 60 * 1000) {
-          console.error('State expired');
-          return NextResponse.redirect(
-            new URL('/settings?error=calendar_auth_expired', request.url)
-          );
-        }
+        stateData = JSON.parse(Buffer.from(state, 'base64url').toString());
       } catch {
-        console.error('Invalid state parameter');
+        stateData = JSON.parse(Buffer.from(state, 'base64').toString());
+      }
+
+      // Verify the state is for this user
+      if (stateData.userId !== user.id) {
+        console.error('State user ID mismatch');
         return NextResponse.redirect(
           new URL('/settings?error=calendar_auth_failed', request.url)
         );
       }
+
+      // Verify state is not too old (5 minutes)
+      if (Date.now() - stateData.timestamp > 5 * 60 * 1000) {
+        console.error('State expired');
+        return NextResponse.redirect(
+          new URL('/settings?error=calendar_auth_expired', request.url)
+        );
+      }
+
+      // Verify HMAC signature if present (new format)
+      if (stateData.sig && stateData.token) {
+        const isValid = verifyStateSignature(
+          stateData.token,
+          stateData.userId,
+          stateData.timestamp,
+          stateData.sig
+        );
+        if (!isValid) {
+          console.error('Invalid state signature - possible CSRF attack');
+          return NextResponse.redirect(
+            new URL('/settings?error=calendar_auth_failed', request.url)
+          );
+        }
+      }
+    } catch {
+      console.error('Invalid state parameter');
+      return NextResponse.redirect(
+        new URL('/settings?error=calendar_auth_failed', request.url)
+      );
     }
 
     // Exchange code for tokens

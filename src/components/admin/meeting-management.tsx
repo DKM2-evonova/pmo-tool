@@ -180,6 +180,7 @@ export function MeetingManagement({ meetings }: MeetingManagementProps) {
                         )
                       }
                       className="rounded-lg p-2 text-surface-400 opacity-0 transition-opacity hover:bg-surface-100 hover:text-surface-600 group-hover:opacity-100"
+                      aria-label="Meeting actions menu"
                     >
                       <MoreVertical className="h-4 w-4" />
                     </button>
@@ -219,6 +220,7 @@ export function MeetingManagement({ meetings }: MeetingManagementProps) {
     </div>
   );
 }
+
 
 
 

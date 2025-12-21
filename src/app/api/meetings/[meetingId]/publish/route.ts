@@ -33,8 +33,8 @@ interface AuditRecord {
   entity_type: 'action_item' | 'decision' | 'risk';
   entity_id: string;
   project_id: string;
-  before_state: unknown | null;
-  after_state: unknown | null;
+  before_data: unknown | null;
+  after_data: unknown | null;
 }
 
 /**
@@ -338,8 +338,8 @@ export async function POST(
         entity_type: entityType,
         entity_id: entityId,
         project_id: meeting.project_id,
-        before_state: before,
-        after_state: after,
+        before_data: before,
+        after_data: after,
       });
     };
 
@@ -394,32 +394,20 @@ export async function POST(
           .eq('id', item.external_id)
           .single();
 
-        // Update existing action item
-        const { data: updated, error } = await supabase
-          .from('action_items')
-          .update({
-            title: item.title,
-            description: item.description,
-            status: item.status,
-            owner_user_id: item.owner.resolved_user_id,
-            owner_name: item.owner.name,
-            owner_email: item.owner.email,
-            due_date: item.due_date,
-            embedding,
-          })
-          .eq('id', item.external_id)
-          .select()
-          .single();
+        // Create AI update comment describing changes (using proposed values for comparison)
+        const proposedUpdate = {
+          title: item.title,
+          description: item.description,
+          status: item.status,
+          owner_name: item.owner.name,
+          due_date: item.due_date,
+        };
 
-        if (error) throw error;
-        actionItemsUpdated++;
-
-        // Create AI update comment describing changes
         const aiUpdate = createAIUpdateComment({
           operation: 'update',
           entityType: 'action_item',
           existing: existing || {},
-          updated: updated || {},
+          updated: proposedUpdate,
           evidence: item.evidence,
           meetingId,
           meetingTitle: meeting.title,
@@ -431,10 +419,26 @@ export async function POST(
         const currentUpdates = parseExistingUpdates(existing?.updates);
         currentUpdates.push(aiUpdate);
 
-        await supabase
+        // Update existing action item - ATOMIC: include updates in same query
+        const { data: updated, error } = await supabase
           .from('action_items')
-          .update({ updates: JSON.stringify(currentUpdates) })
-          .eq('id', item.external_id);
+          .update({
+            title: item.title,
+            description: item.description,
+            status: item.status,
+            owner_user_id: item.owner.resolved_user_id,
+            owner_name: item.owner.name,
+            owner_email: item.owner.email,
+            due_date: item.due_date,
+            embedding,
+            updates: JSON.stringify(currentUpdates),
+          })
+          .eq('id', item.external_id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        actionItemsUpdated++;
 
         // Queue evidence records for batch insertion
         queueEvidence('action_item', item.external_id, item.evidence);
@@ -449,23 +453,12 @@ export async function POST(
           .eq('id', item.external_id)
           .single();
 
-        // Close action item
-        const { data: updated, error } = await supabase
-          .from('action_items')
-          .update({ status: 'Closed' })
-          .eq('id', item.external_id)
-          .select()
-          .single();
-
-        if (error) throw error;
-        actionItemsClosed++;
-
         // Create AI update comment for closure
         const aiUpdate = createAIUpdateComment({
           operation: 'close',
           entityType: 'action_item',
           existing: existing || {},
-          updated: updated || {},
+          updated: { status: 'Closed' },
           evidence: item.evidence,
           meetingId,
           meetingTitle: meeting.title,
@@ -477,10 +470,19 @@ export async function POST(
         const currentUpdates = parseExistingUpdates(existing?.updates);
         currentUpdates.push(aiUpdate);
 
-        await supabase
+        // Close action item - ATOMIC: include updates in same query
+        const { data: updated, error } = await supabase
           .from('action_items')
-          .update({ updates: JSON.stringify(currentUpdates) })
-          .eq('id', item.external_id);
+          .update({
+            status: 'Closed',
+            updates: JSON.stringify(currentUpdates),
+          })
+          .eq('id', item.external_id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        actionItemsClosed++;
 
         // Queue evidence records for batch insertion
         queueEvidence('action_item', item.external_id, item.evidence);
@@ -587,22 +589,12 @@ export async function POST(
           .eq('id', item.external_id)
           .single();
 
-        const { data: updated, error } = await supabase
-          .from('risks')
-          .update({ status: 'Closed' })
-          .eq('id', item.external_id)
-          .select()
-          .single();
-
-        if (error) throw error;
-        risksClosed++;
-
         // Create AI update comment for closure
         const aiUpdate = createAIUpdateComment({
           operation: 'close',
           entityType: 'risk',
           existing: existing || {},
-          updated: updated || {},
+          updated: { status: 'Closed' },
           evidence: item.evidence,
           meetingId,
           meetingTitle: meeting.title,
@@ -614,10 +606,19 @@ export async function POST(
         const currentUpdates = parseExistingUpdates(existing?.updates);
         currentUpdates.push(aiUpdate);
 
-        await supabase
+        // Close risk - ATOMIC: include updates in same query
+        const { data: updated, error } = await supabase
           .from('risks')
-          .update({ updates: JSON.stringify(currentUpdates) })
-          .eq('id', item.external_id);
+          .update({
+            status: 'Closed',
+            updates: JSON.stringify(currentUpdates),
+          })
+          .eq('id', item.external_id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        risksClosed++;
 
         // Queue evidence records for batch insertion
         queueEvidence('risk', item.external_id, item.evidence);
@@ -664,8 +665,8 @@ export async function POST(
             p_entity_type: record.entity_type,
             p_entity_id: record.entity_id,
             p_project_id: record.project_id,
-            p_before: record.before_state,
-            p_after: record.after_state,
+            p_before: record.before_data,
+            p_after: record.after_data,
           });
         }
       }
