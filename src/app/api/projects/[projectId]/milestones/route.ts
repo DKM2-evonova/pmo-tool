@@ -50,7 +50,12 @@ export async function PUT(
       );
     }
 
-    const body = await request.json();
+    let body: { milestones?: unknown };
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
+    }
     const { milestones } = body;
 
     if (!Array.isArray(milestones)) {

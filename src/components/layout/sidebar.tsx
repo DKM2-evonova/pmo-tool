@@ -156,6 +156,7 @@ export function Sidebar({ projects, userRole }: SidebarProps) {
         </Link>
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
+          aria-label="Toggle sidebar"
           className={cn(
             'hidden rounded-lg p-1.5 lg:block',
             'text-surface-400 hover:text-surface-600',
@@ -281,6 +282,7 @@ export function Sidebar({ projects, userRole }: SidebarProps) {
       {/* Mobile menu button */}
       <button
         onClick={() => setMobileOpen(true)}
+        aria-label="Open mobile menu"
         className={cn(
           'fixed left-4 top-4 z-50 lg:hidden',
           'rounded-xl p-2.5',
@@ -312,6 +314,7 @@ export function Sidebar({ projects, userRole }: SidebarProps) {
       >
         <button
           onClick={() => setMobileOpen(false)}
+          aria-label="Close mobile menu"
           className={cn(
             'absolute right-4 top-4 rounded-xl p-2',
             'text-surface-400 hover:text-surface-600',

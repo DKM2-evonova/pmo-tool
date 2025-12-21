@@ -162,6 +162,7 @@ export function ActionItemsTable({ actionItems }: ActionItemsTableProps) {
                   <td className="px-4 py-4">
                     <Link
                       href={`/action-items/${item.id}`}
+                      aria-label="View action item details"
                       className={cn(
                         'flex h-8 w-8 items-center justify-center rounded-lg',
                         'text-surface-300 hover:text-primary-600',

@@ -330,6 +330,7 @@ export function TranscriptUpload({ value, onChange, onFileUploaded }: Transcript
               <span>{fileName}</span>
               <button
                 onClick={handleClear}
+                aria-label="Clear transcript file"
                 className="ml-auto rounded p-1 hover:bg-surface-100"
               >
                 <X className="h-4 w-4" />

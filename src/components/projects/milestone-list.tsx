@@ -183,6 +183,7 @@ export function MilestoneList({ projectId, milestones: initialMilestones }: Mile
                 <button
                   onClick={() => handleDelete(milestone.id)}
                   disabled={deletingId === milestone.id}
+                  aria-label="Delete milestone"
                   className="rounded-lg p-1 text-surface-400 hover:bg-surface-100 hover:text-danger-500 disabled:opacity-50"
                 >
                   {deletingId === milestone.id ? (

@@ -119,7 +119,12 @@ export async function PATCH(
     }
 
     // Validate request body
-    const body: UpdateContactRequest = await request.json();
+    let body: UpdateContactRequest;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
+    }
     const { name, email, avatar_url } = body;
 
     // Build update object

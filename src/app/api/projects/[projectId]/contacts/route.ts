@@ -106,7 +106,12 @@ export async function POST(
     }
 
     // Validate request body
-    const body: CreateContactRequest = await request.json();
+    let body: CreateContactRequest;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
+    }
     const { name, email, avatar_url } = body;
 
     if (!name || typeof name !== 'string' || name.trim().length === 0) {

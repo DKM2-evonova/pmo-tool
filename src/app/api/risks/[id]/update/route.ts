@@ -2,6 +2,7 @@ import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { loggers } from '@/lib/logger';
 import { isValidUUID } from '@/lib/utils';
+import { EntityStatus, RiskSeverity } from '@/types/enums';
 
 const log = loggers.api;
 
@@ -93,7 +94,12 @@ export async function POST(
     }
 
     // Get the update data
-    const body: UpdateRequest = await request.json();
+    let body: UpdateRequest;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
+    }
     const { content, title, description, probability, impact, mitigation, status, owner_user_id } = body;
 
     // Handle status update (content provided)
@@ -152,6 +158,20 @@ export async function POST(
 
     // Handle general risk update
     else if (title !== undefined || description !== undefined || probability !== undefined || impact !== undefined || mitigation !== undefined || status !== undefined || owner_user_id !== undefined) {
+      // Validate enum fields if provided
+      const validStatuses = Object.values(EntityStatus);
+      if (status !== undefined && !validStatuses.includes(status as typeof validStatuses[number])) {
+        return NextResponse.json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` }, { status: 400 });
+      }
+
+      const validSeverities = Object.values(RiskSeverity);
+      if (probability !== undefined && !validSeverities.includes(probability as typeof validSeverities[number])) {
+        return NextResponse.json({ error: `Invalid probability. Must be one of: ${validSeverities.join(', ')}` }, { status: 400 });
+      }
+      if (impact !== undefined && !validSeverities.includes(impact as typeof validSeverities[number])) {
+        return NextResponse.json({ error: `Invalid impact. Must be one of: ${validSeverities.join(', ')}` }, { status: 400 });
+      }
+
       // Prepare update data
       const updateData: UpdateRiskData = {};
       if (title !== undefined) updateData.title = title;

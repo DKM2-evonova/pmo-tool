@@ -46,19 +46,36 @@ export function formatTimestamp(seconds: number): string {
 
 /**
  * Parse timestamp string (HH:MM:SS) to seconds
+ * Returns 0 for invalid input
  */
 export function parseTimestamp(timestamp: string): number {
-  const parts = timestamp.split(':').map(Number);
-  if (parts.length === 3) {
-    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (!timestamp || typeof timestamp !== 'string') {
+    return 0;
   }
-  return 0;
+  const parts = timestamp.split(':').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN) || parts.some(p => p < 0)) {
+    return 0;
+  }
+  const [hours, minutes, seconds] = parts;
+  // Validate ranges: minutes and seconds should be 0-59
+  if (minutes > 59 || seconds > 59) {
+    return 0;
+  }
+  return hours * 3600 + minutes * 60 + seconds;
 }
 
 /**
  * Truncate text with ellipsis
+ * Returns empty string for invalid input
  */
 export function truncate(text: string, maxLength: number): string {
+  if (!text || typeof text !== 'string') {
+    return '';
+  }
+  if (maxLength < 4) {
+    // Can't fit ellipsis, just return first chars
+    return text.slice(0, Math.max(0, maxLength));
+  }
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength - 3) + '...';
 }
@@ -113,10 +130,19 @@ export function isOverdue(dateString: string | null): boolean {
 
 /**
  * Get initials from a name
+ * Returns empty string for invalid input
  */
 export function getInitials(name: string): string {
-  return name
+  if (!name || typeof name !== 'string') {
+    return '';
+  }
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return '';
+  }
+  return trimmed
     .split(' ')
+    .filter(part => part.length > 0)
     .map((part) => part[0])
     .join('')
     .toUpperCase()

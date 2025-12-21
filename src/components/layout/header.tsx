@@ -81,6 +81,7 @@ export function Header({ user }: HeaderProps) {
       <div className="flex items-center gap-3">
         {/* Notifications */}
         <button
+          aria-label="View notifications"
           className={cn(
             'relative rounded-xl p-2.5',
             'text-surface-500 hover:text-surface-700',

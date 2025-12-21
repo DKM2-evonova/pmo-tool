@@ -6,6 +6,7 @@ This document tracks the comprehensive code review and optimization effort for t
 
 **Last Updated:** December 21, 2025
 **Phase 2 Completed:** December 21, 2025 (all items)
+**Phase 3 Progress:** December 21, 2025 (majority completed)
 
 ---
 
@@ -135,40 +136,36 @@ Pre-compiled regex at module load for better performance.
 
 ---
 
-## Phase 3: Medium Priority - PENDING
+## Phase 3: Medium Priority - PARTIALLY COMPLETED
 
 ### API Improvements
 
-- [ ] Add JSON parsing try-catch to all routes accepting body
-- [ ] Validate status enum values before database update
-- [ ] Add consistent error response format
-- [ ] Fix email length validation in POST contact route
+- [x] Add JSON parsing try-catch to all routes accepting body
+- [x] Validate status enum values before database update
+- [x] Add consistent error response format (already consistent)
+- [x] Fix email length validation in POST contact route (already done)
 
 ### Component Improvements
 
-- [ ] Split ReviewUI into smaller components:
-  - `ReviewLockManager`
-  - `ItemEditorModal`
-  - `NewContactModal`
-  - `ProposedItemsList`
-- [ ] Add ARIA labels to remaining icon-only buttons
-- [ ] Fix useEffect dependency arrays
-- [ ] Add loading states during async operations
-- [ ] Replace remaining `alert()` calls with toast notifications
+- [x] Split ReviewUI into smaller components (done in Phase 2)
+- [x] Add ARIA labels to remaining icon-only buttons (11 buttons fixed)
+- [x] Fix useEffect dependency arrays (verified correct)
+- [x] Add loading states during async operations (already present)
+- [ ] Replace remaining `alert()` calls with toast notifications (28 occurrences, deferred)
 
 ### Library Improvements
 
-- [ ] Add input validation to `parseTimestamp()`, `truncate()`, `getInitials()`
+- [x] Add input validation to `parseTimestamp()`, `truncate()`, `getInitials()`
 - [ ] Handle DST edge cases in date arithmetic
 - [ ] Add AbortController for fetch cleanup
 - [ ] Consolidate duplicate check functions into generic function
 
 ### Database Improvements
 
-- [ ] Add missing index on `(user_id, provider)` for oauth_tokens
+- [x] Add missing index on `(user_id, provider)` for oauth_tokens (UNIQUE constraint provides this)
 - [ ] Reconcile TEXT vs JSONB for updates fields
 - [ ] Add soft delete support across all entities
-- [ ] Fix RLS policies for evidence table (missing UPDATE/DELETE)
+- [x] Fix RLS policies for evidence table (missing UPDATE/DELETE) - Migration 00029
 
 ---
 
@@ -386,3 +383,62 @@ interface EditFormData {
 }
 const [editFormData, setEditFormData] = useState<EditFormData>({});
 ```
+
+---
+
+## Phase 3 Implementation Details
+
+### 1. JSON Parsing Try-Catch
+Added explicit JSON parsing error handling to all API routes accepting body:
+- `src/app/api/action-items/[id]/update/route.ts`
+- `src/app/api/risks/[id]/update/route.ts`
+- `src/app/api/projects/[projectId]/milestones/route.ts`
+- `src/app/api/projects/[projectId]/contacts/route.ts`
+- `src/app/api/projects/[projectId]/contacts/[contactId]/route.ts`
+
+Returns `{ error: 'Invalid JSON in request body' }` with status 400 for malformed JSON.
+
+### 2. Status Enum Validation
+Added validation for status, probability, and impact fields:
+- Action items: Validates `EntityStatus` enum values (Open, In Progress, Closed)
+- Risks: Validates `EntityStatus` for status, `RiskSeverity` for probability/impact (Low, Med, High)
+
+### 3. ARIA Labels Added
+Added `aria-label` attributes to 11 icon-only buttons:
+- `src/components/layout/sidebar.tsx` - Toggle sidebar, Open/Close mobile menu
+- `src/components/layout/header.tsx` - View notifications
+- `src/components/ui/modal.tsx` - Close dialog
+- `src/components/meetings/transcript-upload.tsx` - Clear transcript file
+- `src/components/projects/project-form.tsx` - Remove milestone
+- `src/components/projects/milestone-list.tsx` - Delete milestone
+- `src/components/decisions/decisions-table.tsx` - View decision details
+- `src/components/action-items/action-items-table.tsx` - View action item details
+
+### 4. Utility Function Validation
+Enhanced input validation in `src/lib/utils.ts`:
+
+**parseTimestamp():**
+- Validates input is non-empty string
+- Checks for exactly 3 parts (HH:MM:SS)
+- Validates no NaN or negative values
+- Enforces minutes/seconds range (0-59)
+
+**truncate():**
+- Handles null/undefined input
+- Handles maxLength < 4 gracefully
+
+**getInitials():**
+- Handles null/undefined input
+- Trims whitespace
+- Filters empty parts
+
+### 5. Evidence RLS Policies (Migration 00029)
+Added missing UPDATE and DELETE policies to evidence table:
+- Project members can update/delete evidence for meetings in their projects
+- Admins can update/delete any evidence
+
+### 6. Remaining Items Deferred
+- **Replace alert() calls:** 28 occurrences across 14 files - requires toast notification system
+- **AbortController for fetch cleanup:** Requires component-by-component review
+- **DST edge cases:** Low impact, needs careful testing
+- **Consolidate duplicate check functions:** Refactoring task

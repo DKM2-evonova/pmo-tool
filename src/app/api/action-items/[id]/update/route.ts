@@ -2,6 +2,7 @@ import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { loggers } from '@/lib/logger';
 import { isValidUUID } from '@/lib/utils';
+import { EntityStatus } from '@/types/enums';
 
 const log = loggers.api;
 
@@ -89,7 +90,12 @@ export async function POST(
     }
 
     // Get the update data
-    const body: UpdateRequest = await request.json();
+    let body: UpdateRequest;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
+    }
     const { content, title, description, status, owner_user_id, due_date } = body;
 
     // Handle status update (content provided)
@@ -148,6 +154,12 @@ export async function POST(
 
     // Handle general action item update
     else if (title !== undefined || description !== undefined || status !== undefined || owner_user_id !== undefined || due_date !== undefined) {
+      // Validate status if provided
+      const validStatuses = Object.values(EntityStatus);
+      if (status !== undefined && !validStatuses.includes(status as typeof validStatuses[number])) {
+        return NextResponse.json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` }, { status: 400 });
+      }
+
       // Prepare update data
       const updateData: UpdateActionItemData = {};
       if (title !== undefined) updateData.title = title;

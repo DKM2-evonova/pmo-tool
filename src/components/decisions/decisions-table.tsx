@@ -164,6 +164,7 @@ export function DecisionsTable({ decisions }: DecisionsTableProps) {
                 <td className="px-4 py-4">
                   <Link
                     href={`/decisions/${decision.id}`}
+                    aria-label="View decision details"
                     className={cn(
                       'flex h-8 w-8 items-center justify-center rounded-lg',
                       'text-surface-300 hover:text-primary-600',
@@ -183,6 +184,7 @@ export function DecisionsTable({ decisions }: DecisionsTableProps) {
     </div>
   );
 }
+
 
 
 

@@ -254,6 +254,7 @@ export function ProjectForm({ project }: ProjectFormProps) {
                 <button
                   type="button"
                   onClick={() => handleRemoveMilestone(milestone.id)}
+                  aria-label="Remove milestone"
                   className="rounded-lg p-2 text-surface-400 hover:bg-surface-100 hover:text-danger-500"
                 >
                   <Trash2 className="h-4 w-4" />

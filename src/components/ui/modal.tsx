@@ -87,6 +87,7 @@ export function Modal({
               </div>
               <button
                 onClick={onClose}
+                aria-label="Close dialog"
                 className={cn(
                   'rounded-xl p-2 -mr-1 -mt-1',
                   'text-surface-400 hover:text-surface-600',
