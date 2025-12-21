@@ -5,6 +5,10 @@ All notable changes to the PMO Tool are documented here.
 ## [Unreleased]
 
 ### Added
+- **Google Calendar Integration**: Connect your Google Calendar to view upcoming meetings and import them for processing
+  - OAuth 2.0 authentication flow with token refresh
+  - Upcoming meetings widget on dashboard (next 7 days)
+  - Read-only calendar access for meeting import
 - **Liquid Glass Design System**: Premium glassmorphism UI with frosted glass panels, elevated cards, and modern animations
 - New UI utility classes: `.glass-panel`, `.glass-card`, `.glass-column`, `.glass-badge`, `.glass-avatar`, `.status-dot-*`
 - New Tailwind theme extensions: glass shadows, glow effects, float/shimmer/pulse animations

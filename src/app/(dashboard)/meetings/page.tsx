@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Calendar, Plus, Filter, Paperclip } from 'lucide-react';
 import { formatDateReadable } from '@/lib/utils';
 import { Badge } from '@/components/ui';
+import { UpcomingMeetings } from '@/components/google/upcoming-meetings';
 
 export default async function MeetingsPage() {
   const supabase = await createClient();
@@ -129,6 +130,9 @@ export default async function MeetingsPage() {
           </Link>
         </div>
       )}
+
+      {/* Upcoming Meetings from Google Calendar */}
+      <UpcomingMeetings />
     </div>
   );
 }

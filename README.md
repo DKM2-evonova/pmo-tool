@@ -12,7 +12,7 @@ The PMO Tool is an automation layer that sits on top of an organization's existi
 
 ## Features
 
-- **Meeting Processing**: Upload transcripts (VTT, TXT, DOCX, PDF) or connect to Google Meet API
+- **Meeting Processing**: Upload transcripts (VTT, TXT, DOCX, PDF) or import from Google Calendar
 - **AI Extraction**: Uses Gemini 3 Pro Preview and GPT-5.2 to extract structured data with evidence citations
 - **Context-Aware Updates**: Favors updating existing items over creating duplicates using semantic matching
 - **Smart Context Filtering**: Uses vector similarity to filter relevant open items, reducing token usage for large projects
@@ -112,8 +112,10 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 GOOGLE_GENERATIVE_AI_API_KEY=your-gemini-key
 OPENAI_API_KEY=your-openai-key
 
-# Optional: Google Meet API (for automatic transcript fetching)
-GOOGLE_MEET_API_KEY=your-google-meet-api-key
+# Optional: Google Calendar Integration (for importing meetings)
+GOOGLE_CALENDAR_CLIENT_ID=your-google-oauth-client-id
+GOOGLE_CALENDAR_CLIENT_SECRET=your-google-oauth-client-secret
+GOOGLE_CALENDAR_REDIRECT_URI=http://localhost:3000/api/google/calendar/callback
 ```
 
 **Note**: Never commit `.env.local` to version control. It's already included in `.gitignore`.
@@ -132,7 +134,16 @@ npx supabase db push
    - Enable Microsoft/Azure OAuth
    - Set redirect URLs
 
-6. Start the development server:
+6. (Optional) Set up Google Calendar integration:
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select an existing one
+   - Enable the **Google Calendar API** at: APIs & Services > Library > Google Calendar API
+   - Create OAuth 2.0 credentials: APIs & Services > Credentials > Create Credentials > OAuth client ID
+   - Set application type to "Web application"
+   - Add authorized redirect URI: `http://localhost:3000/api/google/calendar/callback` (or your production URL)
+   - Copy the Client ID and Client Secret to your `.env.local` file
+
+7. Start the development server:
 ```bash
 npm run dev
 ```
