@@ -5,6 +5,11 @@ import { loggers } from '@/lib/logger';
 const log = loggers.api;
 
 export async function POST() {
+  // Disable debug routes in production
+  if (process.env.NODE_ENV === 'production' && !process.env.ENABLE_DEBUG_ROUTES) {
+    return NextResponse.json({ error: 'Debug routes disabled in production' }, { status: 404 });
+  }
+
   try {
     // Authentication check
     const userSupabase = await createClient();
@@ -100,6 +105,7 @@ export async function POST() {
     }, { status: 500 });
   }
 }
+
 
 
 

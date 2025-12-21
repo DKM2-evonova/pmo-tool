@@ -11,6 +11,83 @@ import { loggers } from '@/lib/logger';
 
 const log = loggers.owner;
 
+// Cache for Fuse indexes by project to avoid recreating on every call
+interface FuseIndexCache {
+  key: string;
+  fuse: Fuse<{ type: 'user' | 'contact'; id: string; name: string; email: string | null }>;
+  timestamp: number;
+}
+
+const fuseCache = new Map<string, FuseIndexCache>();
+const FUSE_CACHE_TTL_MS = 60000; // 1 minute TTL
+
+/**
+ * Generate a cache key from members and contacts
+ */
+function generateCacheKey(
+  projectMembers: Profile[],
+  projectContacts: ProjectContact[]
+): string {
+  const memberIds = projectMembers.map(m => m.id).sort().join(',');
+  const contactIds = projectContacts.map(c => c.id).sort().join(',');
+  return `${memberIds}|${contactIds}`;
+}
+
+/**
+ * Get or create Fuse index with caching
+ */
+function getCachedFuseIndex(
+  projectMembers: Profile[],
+  projectContacts: ProjectContact[]
+): Fuse<{ type: 'user' | 'contact'; id: string; name: string; email: string | null }> {
+  const cacheKey = generateCacheKey(projectMembers, projectContacts);
+  const now = Date.now();
+  const cached = fuseCache.get(cacheKey);
+
+  if (cached && now - cached.timestamp < FUSE_CACHE_TTL_MS) {
+    log.debug('Using cached Fuse index', { cacheKey: cacheKey.slice(0, 50) });
+    return cached.fuse;
+  }
+
+  // Create unified list for fuzzy matching
+  const allPeople = [
+    ...projectMembers.map(m => ({
+      type: 'user' as const,
+      id: m.id,
+      name: m.full_name || m.email,
+      email: m.email,
+    })),
+    ...projectContacts.map(c => ({
+      type: 'contact' as const,
+      id: c.id,
+      name: c.name,
+      email: c.email,
+    })),
+  ];
+
+  const fuse = new Fuse(allPeople, {
+    keys: ['name', 'email'],
+    threshold: 0.4,
+    includeScore: true,
+  });
+
+  fuseCache.set(cacheKey, { key: cacheKey, fuse, timestamp: now });
+  log.debug('Created new Fuse index', {
+    cacheKey: cacheKey.slice(0, 50),
+    memberCount: projectMembers.length,
+    contactCount: projectContacts.length,
+  });
+
+  // Clean up old cache entries
+  for (const [key, entry] of fuseCache.entries()) {
+    if (now - entry.timestamp > FUSE_CACHE_TTL_MS * 5) {
+      fuseCache.delete(key);
+    }
+  }
+
+  return fuse;
+}
+
 export interface ResolvedOwner {
   name: string;
   email: string | null;
@@ -187,27 +264,8 @@ export function resolveOwner(
   }
 
   // Step 4: Fuzzy match against combined project roster (members + contacts)
-  // Create unified list for fuzzy matching
-  const allPeople = [
-    ...projectMembers.map(m => ({
-      type: 'user' as const,
-      id: m.id,
-      name: m.full_name || m.email,
-      email: m.email,
-    })),
-    ...projectContacts.map(c => ({
-      type: 'contact' as const,
-      id: c.id,
-      name: c.name,
-      email: c.email,
-    })),
-  ];
-
-  const fuse = new Fuse(allPeople, {
-    keys: ['name', 'email'],
-    threshold: 0.4,
-    includeScore: true,
-  });
+  // Use cached Fuse index to avoid recreating on every call
+  const fuse = getCachedFuseIndex(projectMembers, projectContacts);
 
   const fuzzyResults = fuse.search(owner.name);
   log.debug('Step 4: Fuzzy search completed', {

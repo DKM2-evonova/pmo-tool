@@ -71,10 +71,25 @@ export async function GET() {
       return NextResponse.json({ error: 'Failed to fetch project contacts' }, { status: 500 });
     }
 
-    // Group members and contacts by project
+    // Pre-group members and contacts by project_id using Maps for O(1) lookup
+    const membersByProject = new Map<string, typeof members>();
+    members?.forEach(m => {
+      const existing = membersByProject.get(m.project_id) || [];
+      existing.push(m);
+      membersByProject.set(m.project_id, existing);
+    });
+
+    const contactsByProject = new Map<string, typeof contacts>();
+    contacts?.forEach(c => {
+      const existing = contactsByProject.get(c.project_id) || [];
+      existing.push(c);
+      contactsByProject.set(c.project_id, existing);
+    });
+
+    // Build project teams with O(1) lookups instead of O(n) filters
     const projectTeams = projects?.map(project => {
-      const projectMembers = members?.filter(m => m.project_id === project.id) || [];
-      const projectContacts = contacts?.filter(c => c.project_id === project.id) || [];
+      const projectMembers = membersByProject.get(project.id) || [];
+      const projectContacts = contactsByProject.get(project.id) || [];
 
       return {
         ...project,

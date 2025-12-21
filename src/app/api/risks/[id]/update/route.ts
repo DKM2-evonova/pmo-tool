@@ -73,6 +73,13 @@ export async function POST(
       return NextResponse.json({ error: 'Risk not found' }, { status: 404 });
     }
 
+    // Fetch profile once with all needed fields (global_role for auth, full_name for updates)
+    const { data: userProfile } = await supabase
+      .from('profiles')
+      .select('global_role, full_name')
+      .eq('id', user.id)
+      .single();
+
     // Verify user has access to the project (either as member or admin)
     const { data: membership } = await supabase
       .from('project_members')
@@ -81,13 +88,7 @@ export async function POST(
       .eq('user_id', user.id)
       .single();
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('global_role')
-      .eq('id', user.id)
-      .single();
-
-    if (!membership && profile?.global_role !== 'admin') {
+    if (!membership && userProfile?.global_role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -99,14 +100,8 @@ export async function POST(
     if (content) {
       log.debug('Adding status update for risk', { riskId: id });
 
-      // Get user profile for the update
-      const { data: profile } = await serviceSupabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', user.id)
-        .single();
-
-      log.debug('User profile retrieved', { userId: user.id, hasProfile: !!profile });
+      // Use already-fetched userProfile instead of making another query
+      log.debug('User profile retrieved', { userId: user.id, hasProfile: !!userProfile });
 
       // Get current risk
       const { data: risk, error: fetchError } = await serviceSupabase
@@ -128,7 +123,7 @@ export async function POST(
         content: content.trim(),
         created_at: new Date().toISOString(),
         created_by_user_id: user.id,
-        created_by_name: profile?.full_name || 'Unknown',
+        created_by_name: userProfile?.full_name || 'Unknown',
       };
 
       // Update the risk
@@ -168,6 +163,11 @@ export async function POST(
 
       // Handle owner update separately to ensure owner_name and owner_email are only set when owner is being changed
       if (owner_user_id !== undefined) {
+        // Validate owner_user_id is a valid UUID if provided
+        if (owner_user_id && !isValidUUID(owner_user_id)) {
+          return NextResponse.json({ error: 'Invalid owner_user_id format' }, { status: 400 });
+        }
+
         updateData.owner_user_id = owner_user_id || null;
 
         if (owner_user_id) {

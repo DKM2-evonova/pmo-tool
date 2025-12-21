@@ -5,6 +5,7 @@
 This document tracks the comprehensive code review and optimization effort for the PMO Tool Application. The analysis identified **109 issues** across 5 categories, prioritized by severity.
 
 **Last Updated:** December 21, 2025
+**Phase 2 Completed:** December 21, 2025
 
 ---
 
@@ -104,24 +105,24 @@ Pre-compiled regex at module load for better performance.
 
 ---
 
-## Phase 2: High Priority - PENDING
+## Phase 2: High Priority - COMPLETED ✅
 
 ### Security Issues
 
 | # | Issue | File | Status |
 |---|-------|------|--------|
-| 1 | Debug route exposes all memberships | `src/app/api/debug/action-items/route.ts:112` | Pending |
-| 2 | Overly permissive RLS on audit_logs | `supabase/migrations/00011_create_audit_logs.sql:43-47` | Pending |
-| 3 | Missing UUID validation on owner_user_id | `src/app/api/risks/[id]/update/route.ts:164-177` | Pending |
+| 1 | Debug routes disabled in production | `src/app/api/debug/**/*.ts` | ✅ Completed |
+| 2 | Overly permissive RLS on audit_logs | `supabase/migrations/00028_fix_audit_logs_rls.sql` | ✅ Completed |
+| 3 | Missing UUID validation on owner_user_id | `src/app/api/risks/[id]/update/route.ts` and `src/app/api/action-items/[id]/update/route.ts` | ✅ Completed |
 
 ### Performance Issues
 
 | # | Issue | File | Status |
 |---|-------|------|--------|
-| 4 | N+1 queries in admin team overview | `src/app/api/admin/team/route.ts:75-77` | Pending |
-| 5 | Fuse index recreated every call | `src/lib/llm/owner-resolution.ts:206-212` | Pending |
-| 6 | No embedding caching | `src/lib/embeddings/client.ts:30` | Pending |
-| 7 | Profile fetched multiple times per request | Multiple API routes | Pending |
+| 4 | N+1 queries in admin team overview | `src/app/api/admin/team/route.ts` - Using Maps for O(1) lookup | ✅ Completed |
+| 5 | Fuse index recreated every call | `src/lib/llm/owner-resolution.ts` - Added caching with 1min TTL | ✅ Completed |
+| 6 | No embedding caching | `src/lib/embeddings/client.ts` - Added LRU cache with 30min TTL | ✅ Completed |
+| 7 | Profile fetched multiple times per request | `src/app/api/risks/[id]/update/route.ts` and `src/app/api/action-items/[id]/update/route.ts` - Single fetch with all fields | ✅ Completed |
 
 ### Component Issues
 
@@ -276,4 +277,59 @@ After implementing remaining fixes:
 
 - Original analysis performed: December 21, 2025
 - Phase 1 completed: December 21, 2025
+- Phase 2 completed: December 21, 2025
 - Build verified: Passing
+
+---
+
+## Phase 2 Implementation Details
+
+### 1. Debug Routes Production Protection
+Added environment-based protection to all debug routes:
+```typescript
+if (process.env.NODE_ENV === 'production' && !process.env.ENABLE_DEBUG_ROUTES) {
+  return NextResponse.json({ error: 'Debug routes disabled in production' }, { status: 404 });
+}
+```
+
+### 2. Audit Logs RLS Fix (Migration 00028)
+Changed INSERT policy from `WITH CHECK (true)` to `WITH CHECK (false)`:
+- Audit logs can only be inserted via SECURITY DEFINER functions or service role
+- Regular authenticated users cannot directly insert audit logs
+
+### 3. UUID Validation on owner_user_id
+Added validation before database operations:
+```typescript
+if (owner_user_id && !isValidUUID(owner_user_id)) {
+  return NextResponse.json({ error: 'Invalid owner_user_id format' }, { status: 400 });
+}
+```
+
+### 4. Admin Team Route Optimization
+Changed from O(n²) array filters to O(n) Map-based grouping:
+```typescript
+const membersByProject = new Map<string, typeof members>();
+members?.forEach(m => {
+  const existing = membersByProject.get(m.project_id) || [];
+  existing.push(m);
+  membersByProject.set(m.project_id, existing);
+});
+```
+
+### 5. Fuse Index Caching
+Added module-level cache with 1-minute TTL:
+- Cache key based on member/contact IDs
+- Automatic cleanup of stale entries
+- Significant performance improvement for repeated owner resolution
+
+### 6. Embedding Caching
+Added LRU-style cache for OpenAI embeddings:
+- 500 entry capacity with 30-minute TTL
+- Works for both single and batch embedding generation
+- Smart batching: only requests uncached embeddings from API
+- Hash-based keys for long texts
+
+### 7. Profile Fetch Optimization
+Combined duplicate profile queries into single fetch:
+- Before: Two separate queries for `global_role` and `full_name`
+- After: Single query with `select('global_role, full_name')`
