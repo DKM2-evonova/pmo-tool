@@ -13,7 +13,7 @@ The PMO Tool is an automation layer that sits on top of an organization's existi
 ## Features
 
 - **Meeting Processing**: Upload transcripts (VTT, TXT, DOCX, PDF) or connect to Google Meet API
-- **AI Extraction**: Uses Gemini 3 Pro Preview and GPT-4o to extract structured data with evidence citations
+- **AI Extraction**: Uses Gemini 3 Pro Preview and GPT-5.2 to extract structured data with evidence citations
 - **Context-Aware Updates**: Favors updating existing items over creating duplicates using semantic matching
 - **Smart Context Filtering**: Uses vector similarity to filter relevant open items, reducing token usage for large projects
 - **5 Meeting Categories**: Project, Governance, Discovery, Alignment, Remediation
@@ -37,8 +37,8 @@ The PMO Tool is an automation layer that sits on top of an organization's existi
 - **Backend**: Supabase (Postgres + RLS + pgvector)
 - **LLM**:
   - Primary: Gemini 3 Pro Preview (recaps, decisions, risk analysis)
-  - Fallback: OpenAI GPT-4o (used if Gemini fails)
-  - Utility: Gemini Flash (formatting, JSON validation/repair)
+  - Fallback: OpenAI GPT-5.2 (used if Gemini fails)
+  - Utility: Gemini 2.0 Flash (formatting, JSON validation/repair)
 - **Deployment**: Google Cloud Run
 - **Authentication**: Supabase Auth with Google/Microsoft OAuth support
 

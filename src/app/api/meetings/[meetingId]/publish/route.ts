@@ -13,6 +13,31 @@ import type {
 const log = loggers.publish;
 
 /**
+ * Evidence record for batch insertion
+ */
+interface EvidenceRecord {
+  entity_type: 'action_item' | 'decision' | 'risk';
+  entity_id: string;
+  meeting_id: string;
+  quote: string;
+  speaker: string | null;
+  timestamp: string | null;
+}
+
+/**
+ * Audit log record for batch insertion
+ */
+interface AuditRecord {
+  user_id: string;
+  action_type: 'create' | 'update' | 'close';
+  entity_type: 'action_item' | 'decision' | 'risk';
+  entity_id: string;
+  project_id: string;
+  before_state: unknown | null;
+  after_state: unknown | null;
+}
+
+/**
  * Creates an AI-generated update comment for action items or risks
  * when they are updated or closed via meeting processing.
  */
@@ -277,6 +302,47 @@ export async function POST(
     let risksClosed = 0;
     let embeddingFailures = 0;
 
+    // Collect evidence and audit records for batch insertion (PERFORMANCE OPTIMIZATION)
+    const evidenceRecords: EvidenceRecord[] = [];
+    const auditRecords: AuditRecord[] = [];
+
+    // Helper function to queue evidence records
+    const queueEvidence = (
+      entityType: 'action_item' | 'decision' | 'risk',
+      entityId: string,
+      evidence: { quote: string; speaker: string | null; timestamp: string | null }[]
+    ) => {
+      for (const e of evidence) {
+        evidenceRecords.push({
+          entity_type: entityType,
+          entity_id: entityId,
+          meeting_id: meetingId,
+          quote: e.quote,
+          speaker: e.speaker,
+          timestamp: e.timestamp,
+        });
+      }
+    };
+
+    // Helper function to queue audit records
+    const queueAudit = (
+      actionType: 'create' | 'update' | 'close',
+      entityType: 'action_item' | 'decision' | 'risk',
+      entityId: string,
+      before: unknown | null,
+      after: unknown | null
+    ) => {
+      auditRecords.push({
+        user_id: user.id,
+        action_type: actionType,
+        entity_type: entityType,
+        entity_id: entityId,
+        project_id: meeting.project_id,
+        before_state: before,
+        after_state: after,
+      });
+    };
+
     // Process accepted action items
     log.debug('Processing action items', { count: acceptedActionItems.length });
     for (const item of acceptedActionItems) {
@@ -315,28 +381,11 @@ export async function POST(
         if (error) throw error;
         actionItemsCreated++;
 
-        // Create evidence records
-        for (const evidence of item.evidence) {
-          await supabase.from('evidence').insert({
-            entity_type: 'action_item',
-            entity_id: newItem.id,
-            meeting_id: meetingId,
-            quote: evidence.quote,
-            speaker: evidence.speaker,
-            timestamp: evidence.timestamp,
-          });
-        }
+        // Queue evidence records for batch insertion
+        queueEvidence('action_item', newItem.id, item.evidence);
 
-        // Audit log
-        await serviceClient.rpc('create_audit_log', {
-          p_user_id: user.id,
-          p_action_type: 'create',
-          p_entity_type: 'action_item',
-          p_entity_id: newItem.id,
-          p_project_id: meeting.project_id,
-          p_before: null,
-          p_after: newItem,
-        });
+        // Queue audit log for batch insertion
+        queueAudit('create', 'action_item', newItem.id, null, newItem);
       } else if (item.operation === 'update' && item.external_id) {
         // Get existing item for audit and updates array
         const { data: existing } = await supabase
@@ -387,28 +436,11 @@ export async function POST(
           .update({ updates: JSON.stringify(currentUpdates) })
           .eq('id', item.external_id);
 
-        // Create evidence records
-        for (const evidence of item.evidence) {
-          await supabase.from('evidence').insert({
-            entity_type: 'action_item',
-            entity_id: item.external_id,
-            meeting_id: meetingId,
-            quote: evidence.quote,
-            speaker: evidence.speaker,
-            timestamp: evidence.timestamp,
-          });
-        }
+        // Queue evidence records for batch insertion
+        queueEvidence('action_item', item.external_id, item.evidence);
 
-        // Audit log
-        await serviceClient.rpc('create_audit_log', {
-          p_user_id: user.id,
-          p_action_type: 'update',
-          p_entity_type: 'action_item',
-          p_entity_id: item.external_id,
-          p_project_id: meeting.project_id,
-          p_before: existing,
-          p_after: updated,
-        });
+        // Queue audit log for batch insertion
+        queueAudit('update', 'action_item', item.external_id, existing, updated);
       } else if (item.operation === 'close' && item.external_id) {
         // Get existing item for audit and updates array
         const { data: existing } = await supabase
@@ -450,28 +482,11 @@ export async function POST(
           .update({ updates: JSON.stringify(currentUpdates) })
           .eq('id', item.external_id);
 
-        // Create evidence records for the close action
-        for (const evidence of item.evidence) {
-          await supabase.from('evidence').insert({
-            entity_type: 'action_item',
-            entity_id: item.external_id,
-            meeting_id: meetingId,
-            quote: evidence.quote,
-            speaker: evidence.speaker,
-            timestamp: evidence.timestamp,
-          });
-        }
+        // Queue evidence records for batch insertion
+        queueEvidence('action_item', item.external_id, item.evidence);
 
-        // Audit log
-        await serviceClient.rpc('create_audit_log', {
-          p_user_id: user.id,
-          p_action_type: 'close',
-          p_entity_type: 'action_item',
-          p_entity_id: item.external_id,
-          p_project_id: meeting.project_id,
-          p_before: existing,
-          p_after: updated,
-        });
+        // Queue audit log for batch insertion
+        queueAudit('close', 'action_item', item.external_id, existing, updated);
       }
     }
 
@@ -512,28 +527,11 @@ export async function POST(
         if (error) throw error;
         decisionsCreated++;
 
-        // Create evidence records
-        for (const evidence of item.evidence) {
-          await supabase.from('evidence').insert({
-            entity_type: 'decision',
-            entity_id: newItem.id,
-            meeting_id: meetingId,
-            quote: evidence.quote,
-            speaker: evidence.speaker,
-            timestamp: evidence.timestamp,
-          });
-        }
+        // Queue evidence records for batch insertion
+        queueEvidence('decision', newItem.id, item.evidence);
 
-        // Audit log
-        await serviceClient.rpc('create_audit_log', {
-          p_user_id: user.id,
-          p_action_type: 'create',
-          p_entity_type: 'decision',
-          p_entity_id: newItem.id,
-          p_project_id: meeting.project_id,
-          p_before: null,
-          p_after: newItem,
-        });
+        // Queue audit log for batch insertion
+        queueAudit('create', 'decision', newItem.id, null, newItem);
       }
     }
 
@@ -576,28 +574,11 @@ export async function POST(
         if (error) throw error;
         risksCreated++;
 
-        // Create evidence records
-        for (const evidence of item.evidence) {
-          await supabase.from('evidence').insert({
-            entity_type: 'risk',
-            entity_id: newItem.id,
-            meeting_id: meetingId,
-            quote: evidence.quote,
-            speaker: evidence.speaker,
-            timestamp: evidence.timestamp,
-          });
-        }
+        // Queue evidence records for batch insertion
+        queueEvidence('risk', newItem.id, item.evidence);
 
-        // Audit log
-        await serviceClient.rpc('create_audit_log', {
-          p_user_id: user.id,
-          p_action_type: 'create',
-          p_entity_type: 'risk',
-          p_entity_id: newItem.id,
-          p_project_id: meeting.project_id,
-          p_before: null,
-          p_after: newItem,
-        });
+        // Queue audit log for batch insertion
+        queueAudit('create', 'risk', newItem.id, null, newItem);
       } else if (item.operation === 'close' && item.external_id) {
         // Get existing item for audit and updates array
         const { data: existing } = await supabase
@@ -638,28 +619,55 @@ export async function POST(
           .update({ updates: JSON.stringify(currentUpdates) })
           .eq('id', item.external_id);
 
-        // Create evidence records for the close action
-        for (const evidence of item.evidence) {
-          await supabase.from('evidence').insert({
-            entity_type: 'risk',
-            entity_id: item.external_id,
-            meeting_id: meetingId,
-            quote: evidence.quote,
-            speaker: evidence.speaker,
-            timestamp: evidence.timestamp,
+        // Queue evidence records for batch insertion
+        queueEvidence('risk', item.external_id, item.evidence);
+
+        // Queue audit log for batch insertion
+        queueAudit('close', 'risk', item.external_id, existing, updated);
+      }
+    }
+
+    // PERFORMANCE OPTIMIZATION: Batch insert all evidence records in a single query
+    if (evidenceRecords.length > 0) {
+      log.debug('Batch inserting evidence records', { count: evidenceRecords.length });
+      const { error: evidenceError } = await serviceClient.rpc('batch_insert_evidence', {
+        p_evidence_records: evidenceRecords,
+      });
+
+      if (evidenceError) {
+        // Fall back to individual inserts if batch fails (for backwards compatibility)
+        log.warn('Batch evidence insert failed, falling back to individual inserts', {
+          error: evidenceError.message,
+        });
+        for (const record of evidenceRecords) {
+          await supabase.from('evidence').insert(record);
+        }
+      }
+    }
+
+    // PERFORMANCE OPTIMIZATION: Batch insert all audit logs in a single query
+    if (auditRecords.length > 0) {
+      log.debug('Batch inserting audit logs', { count: auditRecords.length });
+      const { error: auditError } = await serviceClient.rpc('batch_create_audit_logs', {
+        p_audit_records: auditRecords,
+      });
+
+      if (auditError) {
+        // Fall back to individual inserts if batch fails (for backwards compatibility)
+        log.warn('Batch audit log insert failed, falling back to individual inserts', {
+          error: auditError.message,
+        });
+        for (const record of auditRecords) {
+          await serviceClient.rpc('create_audit_log', {
+            p_user_id: record.user_id,
+            p_action_type: record.action_type,
+            p_entity_type: record.entity_type,
+            p_entity_id: record.entity_id,
+            p_project_id: record.project_id,
+            p_before: record.before_state,
+            p_after: record.after_state,
           });
         }
-
-        // Audit log
-        await serviceClient.rpc('create_audit_log', {
-          p_user_id: user.id,
-          p_action_type: 'close',
-          p_entity_type: 'risk',
-          p_entity_id: item.external_id,
-          p_project_id: meeting.project_id,
-          p_before: existing,
-          p_after: updated,
-        });
       }
     }
 
@@ -693,6 +701,10 @@ export async function POST(
         closed: risksClosed,
       },
       embeddingFailures,
+      batchOperations: {
+        evidenceRecords: evidenceRecords.length,
+        auditRecords: auditRecords.length,
+      },
     });
 
     return NextResponse.json({ success: true });

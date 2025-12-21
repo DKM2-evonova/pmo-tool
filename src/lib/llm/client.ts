@@ -1,15 +1,17 @@
 /**
  * LLM Client Abstraction Layer
- * Supports Gemini 3 Pro Preview (primary), GPT-5.2 (fallback), and Gemini 2.5 Flash (utility)
+ * Supports Gemini 3 Pro Preview (primary), GPT-5.2 (fallback), and Gemini 2.0 Flash (utility)
+ *
+ * Updated December 2025 to use @google/genai SDK
  */
 
-import { GoogleGenerativeAI, GenerationConfig } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import OpenAI from 'openai';
 import { loggers } from '@/lib/logger';
 
 const log = loggers.llm;
 
-export type LLMModel = 'gemini-3-pro-preview' | 'gpt-5.2' | 'gemini-2.5-flash';
+export type LLMModel = 'gemini-3-pro-preview' | 'gpt-5.2' | 'gemini-2.0-flash';
 
 /**
  * LLM Generation Settings
@@ -17,7 +19,7 @@ export type LLMModel = 'gemini-3-pro-preview' | 'gpt-5.2' | 'gemini-2.5-flash';
  * Increase maxOutputTokens if output is being truncated.
  */
 export const LLM_SETTINGS = {
-  // Primary model (Gemini) settings
+  // Primary model (Gemini 3 Pro) settings
   gemini: {
     maxOutputTokens: 8192, // Allows complete extraction of all items with evidence
     temperature: 0.3, // Low for consistent, structured JSON output
@@ -29,7 +31,7 @@ export const LLM_SETTINGS = {
     maxTokens: 8192, // Match Gemini for consistency
     temperature: 0.3, // Low for structured output
   },
-  // Utility model (Gemini Flash) settings - for JSON repair
+  // Utility model (Gemini 2.0 Flash) settings - for JSON repair
   geminiFlash: {
     maxOutputTokens: 16384, // Large enough to handle full meeting JSON repair
     temperature: 0.1, // Very low for deterministic JSON output
@@ -49,7 +51,7 @@ interface LLMClientConfig {
 }
 
 export class LLMClient {
-  private gemini: GoogleGenerativeAI | null = null;
+  private gemini: GoogleGenAI | null = null;
   private openai: OpenAI | null = null;
 
   constructor(config?: LLMClientConfig) {
@@ -57,7 +59,7 @@ export class LLMClient {
     const openaiKey = config?.openaiApiKey || process.env.OPENAI_API_KEY;
 
     if (googleKey) {
-      this.gemini = new GoogleGenerativeAI(googleKey);
+      this.gemini = new GoogleGenAI({ apiKey: googleKey });
     }
     if (openaiKey) {
       this.openai = new OpenAI({ apiKey: openaiKey });
@@ -87,7 +89,7 @@ export class LLMClient {
       hasOpenAI: !!this.openai,
     });
 
-    // Try Gemini first
+    // Try Gemini 3 Pro first
     try {
       if (this.gemini) {
         log.debug('Attempting Gemini generation', {
@@ -97,30 +99,21 @@ export class LLMClient {
           jsonMode,
         });
 
-        const generationConfig: GenerationConfig = {
-          maxOutputTokens: LLM_SETTINGS.gemini.maxOutputTokens,
-          temperature: LLM_SETTINGS.gemini.temperature,
-          topP: LLM_SETTINGS.gemini.topP,
-          topK: LLM_SETTINGS.gemini.topK,
-          ...(jsonMode && { responseMimeType: 'application/json' }),
-        };
+        const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
 
-        const model = this.gemini.getGenerativeModel({
+        const response = await this.gemini.models.generateContent({
           model: 'gemini-3-pro-preview',
-          generationConfig,
+          contents: fullPrompt,
+          config: {
+            maxOutputTokens: LLM_SETTINGS.gemini.maxOutputTokens,
+            temperature: LLM_SETTINGS.gemini.temperature,
+            topP: LLM_SETTINGS.gemini.topP,
+            topK: LLM_SETTINGS.gemini.topK,
+            ...(jsonMode && { responseMimeType: 'application/json' }),
+          },
         });
-        const result = await model.generateContent({
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                { text: systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt },
-              ],
-            },
-          ],
-        });
-        const response = result.response;
-        const text = response.text();
+
+        const text = response.text || '';
         const latencyMs = Date.now() - startTime;
 
         log.info('Gemini generation successful', {
@@ -156,7 +149,7 @@ export class LLMClient {
           maxTokens: LLM_SETTINGS.openai.maxTokens,
           temperature: LLM_SETTINGS.openai.temperature,
         });
-        
+
         const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
         if (systemPrompt) {
           messages.push({ role: 'system', content: systemPrompt });
@@ -173,7 +166,7 @@ export class LLMClient {
 
         const content = response.choices[0]?.message?.content || '';
         const latencyMs = Date.now() - startTime;
-        
+
         log.info('OpenAI fallback successful', {
           model: 'gpt-5.2',
           inputChars: totalInputChars,
@@ -253,7 +246,7 @@ export class LLMClient {
   }
 
   /**
-   * Use utility model (Gemini 2.5 Flash) for JSON validation/repair
+   * Use utility model (Gemini 2.0 Flash) for JSON validation/repair
    */
   async repairJSON(
     invalidJson: string,
@@ -283,20 +276,18 @@ INSTRUCTIONS:
 CORRECTED JSON:`;
 
     if (this.gemini) {
-      const generationConfig: GenerationConfig = {
-        maxOutputTokens: LLM_SETTINGS.geminiFlash.maxOutputTokens,
-        temperature: LLM_SETTINGS.geminiFlash.temperature,
-        responseMimeType: 'application/json', // Force JSON output
-      };
-
-      const model = this.gemini.getGenerativeModel({
-        model: 'gemini-2.5-flash',
-        generationConfig,
-      });
-      
       try {
-        const result = await model.generateContent(prompt);
-        const text = result.response.text();
+        const response = await this.gemini.models.generateContent({
+          model: 'gemini-2.0-flash',
+          contents: prompt,
+          config: {
+            maxOutputTokens: LLM_SETTINGS.geminiFlash.maxOutputTokens,
+            temperature: LLM_SETTINGS.geminiFlash.temperature,
+            responseMimeType: 'application/json', // Force JSON output
+          },
+        });
+
+        const text = response.text || '';
 
         // Extract JSON using multiple strategies
         let content = text.trim();
@@ -336,7 +327,7 @@ CORRECTED JSON:`;
 
         return {
           content,
-          model: 'gemini-2.5-flash',
+          model: 'gemini-2.0-flash',
           isFallback: false,
           latencyMs,
         };
@@ -351,7 +342,7 @@ CORRECTED JSON:`;
     }
 
     log.error('JSON repair unavailable - Gemini Flash not configured');
-    throw new Error('Gemini 2.5 Flash not configured for JSON repair functionality');
+    throw new Error('Gemini 2.0 Flash not configured for JSON repair functionality');
   }
 }
 
@@ -364,4 +355,3 @@ export function getLLMClient(): LLMClient {
   }
   return llmClient;
 }
-

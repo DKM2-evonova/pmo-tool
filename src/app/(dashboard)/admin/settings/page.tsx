@@ -70,7 +70,7 @@ export default async function AdminSettingsPage() {
             <div>
               <p className="font-medium text-surface-900">Utility Model</p>
               <p className="text-sm text-surface-500">
-                Gemini 2.5 Flash (JSON validation/repair)
+                Gemini 2.0 Flash (JSON validation/repair)
               </p>
             </div>
             <span className="badge-success">Active</span>

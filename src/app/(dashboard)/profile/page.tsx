@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { ProfileForm } from '@/components/profile/profile-form';
+import { CalendarConnect } from '@/components/google';
 
 export default async function ProfilePage() {
   const supabase = await createClient();
@@ -21,6 +22,12 @@ export default async function ProfilePage() {
       </div>
 
       <ProfileForm profile={profile} />
+
+      {/* Integrations Section */}
+      <div>
+        <h2 className="text-lg font-semibold text-surface-900 mb-4">Integrations</h2>
+        <CalendarConnect />
+      </div>
     </div>
   );
 }

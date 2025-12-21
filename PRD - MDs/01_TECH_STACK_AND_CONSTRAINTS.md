@@ -15,8 +15,8 @@
 
 ## LLM Strategy (fixed)
 - **Primary LLM**: Gemini 3 Pro Preview (recaps/decisions/risk analysis).
-- **Fallback LLM**: OpenAI GPT-4o (used if Gemini fails).
-- **Utility LLM**: Gemini Flash (formatting/JSON validation/repair).
+- **Fallback LLM**: OpenAI GPT-5.2 (used if Gemini fails).
+- **Utility LLM**: Gemini 2.0 Flash (formatting/JSON validation/repair).
 
 ## Cost Circuit Breaker (MUST)
 - The system **MUST** notify Admin if **fallback usage exceeds 15%** of total LLM requests in a **rolling 24-hour window**.

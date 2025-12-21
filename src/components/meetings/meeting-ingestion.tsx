@@ -1,21 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button, Select, Input } from '@/components/ui';
 import { TranscriptUpload, UploadedFileInfo } from './transcript-upload';
 import { AttendeeInput } from './attendee-input';
 import { CategorySelector } from './category-selector';
+import { CalendarEventPicker } from '@/components/google';
 import {
   Upload,
   Chrome,
   ChevronRight,
   ChevronLeft,
   Loader2,
+  Calendar,
+  X,
 } from 'lucide-react';
 import type { MeetingCategory } from '@/types/enums';
 import type { MeetingAttendee } from '@/types/database';
+import type { CalendarEvent } from '@/lib/google/types';
 
 interface MeetingIngestionProps {
   projects: Array<{ id: string; name: string }>;
@@ -34,6 +38,11 @@ export function MeetingIngestion({
   const [step, setStep] = useState<Step>('project');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Calendar integration state
+  const [isCalendarConnected, setIsCalendarConnected] = useState(false);
+  const [showCalendarPicker, setShowCalendarPicker] = useState(false);
+  const [selectedCalendarEvent, setSelectedCalendarEvent] = useState<CalendarEvent | null>(null);
+
   // Form data
   const [projectId, setProjectId] = useState(preselectedProjectId || '');
   const [title, setTitle] = useState('');
@@ -42,6 +51,46 @@ export function MeetingIngestion({
   const [attendees, setAttendees] = useState<MeetingAttendee[]>([]);
   const [category, setCategory] = useState<MeetingCategory | ''>('');
   const [uploadedFile, setUploadedFile] = useState<UploadedFileInfo | null>(null);
+
+  // Check if calendar is connected on mount
+  useEffect(() => {
+    async function checkCalendarStatus() {
+      try {
+        const response = await fetch('/api/google/calendar/status');
+        if (response.ok) {
+          const data = await response.json();
+          setIsCalendarConnected(data.connected);
+        }
+      } catch (error) {
+        console.error('Failed to check calendar status:', error);
+      }
+    }
+    checkCalendarStatus();
+  }, []);
+
+  // Handle calendar event selection
+  const handleCalendarEventSelect = (event: CalendarEvent) => {
+    setSelectedCalendarEvent(event);
+    setTitle(event.title);
+    setDate(event.startTime.split('T')[0]);
+
+    // Convert calendar attendees to meeting attendees
+    const meetingAttendees: MeetingAttendee[] = event.attendees.map((a) => ({
+      name: a.name || a.email.split('@')[0],
+      email: a.email,
+    }));
+    setAttendees(meetingAttendees);
+
+    setShowCalendarPicker(false);
+  };
+
+  // Clear calendar selection
+  const handleClearCalendarSelection = () => {
+    setSelectedCalendarEvent(null);
+    setTitle('');
+    setDate(new Date().toISOString().split('T')[0]);
+    setAttendees([]);
+  };
 
   const canProceed = () => {
     switch (step) {
@@ -178,25 +227,90 @@ export function MeetingIngestion({
             <h2 className="text-lg font-semibold text-surface-900">
               Select Project & Meeting Details
             </h2>
-            <Select
-              label="Project"
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              options={projects.map((p) => ({ value: p.id, label: p.name }))}
-              placeholder="Select a project"
-            />
-            <Input
-              label="Meeting Title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g., Weekly Status Update"
-            />
-            <Input
-              label="Meeting Date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
+
+            {/* Calendar Event Picker */}
+            {isCalendarConnected && !showCalendarPicker && (
+              <div className="rounded-lg border border-primary-200 bg-primary-50/50 p-4">
+                {selectedCalendarEvent ? (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Calendar className="h-5 w-5 text-primary-600" />
+                      <div>
+                        <p className="font-medium text-surface-900">
+                          Imported from Calendar
+                        </p>
+                        <p className="text-sm text-surface-500">
+                          {selectedCalendarEvent.title} - {selectedCalendarEvent.attendees.length} attendees
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleClearCalendarSelection}
+                    >
+                      <X className="h-4 w-4" />
+                      Clear
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Calendar className="h-5 w-5 text-primary-600" />
+                      <div>
+                        <p className="font-medium text-surface-900">
+                          Import from Google Calendar
+                        </p>
+                        <p className="text-sm text-surface-500">
+                          Auto-fill meeting details and attendees
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setShowCalendarPicker(true)}
+                    >
+                      Select Meeting
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Calendar Picker Modal/Inline */}
+            {showCalendarPicker && (
+              <div className="rounded-lg border border-surface-200 bg-white p-4">
+                <CalendarEventPicker
+                  onSelect={handleCalendarEventSelect}
+                  onCancel={() => setShowCalendarPicker(false)}
+                />
+              </div>
+            )}
+
+            {!showCalendarPicker && (
+              <>
+                <Select
+                  label="Project"
+                  value={projectId}
+                  onChange={(e) => setProjectId(e.target.value)}
+                  options={projects.map((p) => ({ value: p.id, label: p.name }))}
+                  placeholder="Select a project"
+                />
+                <Input
+                  label="Meeting Title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g., Weekly Status Update"
+                />
+                <Input
+                  label="Meeting Date"
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                />
+              </>
+            )}
           </div>
         )}
 

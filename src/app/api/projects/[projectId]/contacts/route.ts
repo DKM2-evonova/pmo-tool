@@ -1,6 +1,7 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { loggers } from '@/lib/logger';
+import { findSimilarNames, buildPeopleRoster } from '@/lib/utils/name-matching';
 
 const log = loggers.api;
 
@@ -153,6 +154,56 @@ export async function POST(
 
       if (existingContact) {
         return NextResponse.json({ error: 'A contact with this email already exists on this project' }, { status: 409 });
+      }
+    }
+
+    // Check for similar names (unless force=true is passed)
+    const forceAdd = request.nextUrl.searchParams.get('force') === 'true';
+    if (!forceAdd) {
+      // Fetch existing project members and contacts for name matching
+      const [{ data: members }, { data: contacts }] = await Promise.all([
+        serviceSupabase
+          .from('project_members')
+          .select('user_id, profile:profiles(id, full_name, email)')
+          .eq('project_id', projectId),
+        serviceSupabase
+          .from('project_contacts')
+          .select('id, name, email')
+          .eq('project_id', projectId),
+      ]);
+
+      const projectMembers = (members || [])
+        .map((m: any) => m.profile)
+        .filter(Boolean)
+        .map((p: any) => ({
+          id: p.id,
+          full_name: p.full_name,
+          email: p.email,
+        }));
+
+      const projectContacts = (contacts || []).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        email: c.email,
+      }));
+
+      const roster = buildPeopleRoster(projectMembers, projectContacts);
+      const { hasSimilarNames, matches } = findSimilarNames(name.trim(), roster);
+
+      if (hasSimilarNames && matches.length > 0) {
+        log.info('Similar names found when creating contact', {
+          projectId,
+          newName: name.trim(),
+          matchCount: matches.length,
+        });
+        return NextResponse.json(
+          {
+            error: 'similar_names_found',
+            message: 'Similar names already exist in this project',
+            matches,
+          },
+          { status: 409 }
+        );
       }
     }
 

@@ -18,6 +18,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { cn, formatDateReadable } from '@/lib/utils';
+import { findSimilarNames, buildPeopleRoster, type PersonMatch } from '@/lib/utils/name-matching';
 import type {
   ProposedChangeSet,
   ProposedActionItem,
@@ -89,6 +90,11 @@ export function ReviewUI({
   const [isAddingContact, setIsAddingContact] = useState(false);
   const [isAddingAllContacts, setIsAddingAllContacts] = useState(false);
 
+  // Similar name detection state
+  const [similarNameMatches, setSimilarNameMatches] = useState<PersonMatch[]>([]);
+  const [showSimilarNameWarning, setShowSimilarNameWarning] = useState(false);
+  const [forceAddContact, setForceAddContact] = useState(false);
+
   // Acquire lock when entering review mode
   const acquireLock = async () => {
     try {
@@ -154,12 +160,73 @@ export function ReviewUI({
     }));
   };
 
+  // Helper to get original owner name from an item
+  const getItemOwnerName = (type: 'action_items' | 'risks', tempId: string): string | null => {
+    const items = proposedItems[type] as any[];
+    const item = items.find((i) => i.temp_id === tempId);
+    return item?.owner?.name || null;
+  };
+
+  // Helper to count items with matching owner name
+  const countItemsWithOwnerName = (ownerName: string): number => {
+    const normalizedName = ownerName.toLowerCase();
+    let count = 0;
+    proposedItems.action_items.forEach((item) => {
+      if (item.owner?.name?.toLowerCase() === normalizedName) count++;
+    });
+    proposedItems.risks.forEach((item) => {
+      if (item.owner?.name?.toLowerCase() === normalizedName) count++;
+    });
+    return count;
+  };
+
+  // Apply owner resolution to all items with matching owner name
+  const applyOwnerToAllMatching = (
+    ownerName: string,
+    newOwner: {
+      name: string;
+      email: string | null;
+      resolved_user_id: string | null;
+      resolved_contact_id: string | null;
+    },
+    newStatus: string
+  ) => {
+    const normalizedName = ownerName.toLowerCase();
+
+    setProposedItems((prev) => ({
+      ...prev,
+      action_items: prev.action_items.map((item: ProposedActionItem) =>
+        item.owner?.name?.toLowerCase() === normalizedName
+          ? {
+              ...item,
+              owner: newOwner,
+              owner_resolution_status: newStatus,
+            }
+          : item
+      ),
+      risks: prev.risks.map((item: ProposedRisk) =>
+        item.owner?.name?.toLowerCase() === normalizedName
+          ? {
+              ...item,
+              owner: newOwner,
+              owner_resolution_status: newStatus,
+            }
+          : item
+      ),
+    }));
+  };
+
   // Update owner resolution (handles both users and contacts)
+  // Auto-applies to ALL items with the same owner name
   const updateOwner = (
     type: 'action_items' | 'risks',
     tempId: string,
     selectedValue: string
   ) => {
+    // Get the original owner name before making changes
+    const originalOwnerName = getItemOwnerName(type, tempId);
+    if (!originalOwnerName) return;
+
     // Value is prefixed with 'user:' or 'contact:'
     const [ownerType, id] = selectedValue.includes(':')
       ? selectedValue.split(':')
@@ -169,56 +236,56 @@ export function ReviewUI({
       const member = projectMembers.find((m) => m.id === id);
       if (!member) return;
 
-      setProposedItems((prev) => ({
-        ...prev,
-        [type]: prev[type].map((item: any) =>
-          item.temp_id === tempId
-            ? {
-                ...item,
-                owner: {
-                  name: member.full_name || member.email,
-                  email: member.email,
-                  resolved_user_id: member.id,
-                  resolved_contact_id: null,
-                },
-                owner_resolution_status: 'resolved',
-              }
-            : item
-        ),
-      }));
+      const newOwner = {
+        name: member.full_name || member.email,
+        email: member.email,
+        resolved_user_id: member.id,
+        resolved_contact_id: null,
+      };
+
+      // Apply to all items with matching owner name
+      applyOwnerToAllMatching(originalOwnerName, newOwner, 'resolved');
     } else if (ownerType === 'contact') {
       const contact = projectContacts.find((c) => c.id === id);
       if (!contact) return;
 
-      setProposedItems((prev) => ({
-        ...prev,
-        [type]: prev[type].map((item: any) =>
-          item.temp_id === tempId
-            ? {
-                ...item,
-                owner: {
-                  name: contact.name,
-                  email: contact.email,
-                  resolved_user_id: null,
-                  resolved_contact_id: contact.id,
-                },
-                owner_resolution_status: 'resolved',
-              }
-            : item
-        ),
-      }));
+      const newOwner = {
+        name: contact.name,
+        email: contact.email,
+        resolved_user_id: null,
+        resolved_contact_id: contact.id,
+      };
+
+      // Apply to all items with matching owner name
+      applyOwnerToAllMatching(originalOwnerName, newOwner, 'resolved');
     }
   };
 
   // Accept unknown owner as placeholder
+  // Auto-applies to ALL items with the same owner name
   const acceptAsPlaceholder = (
     type: 'action_items' | 'risks',
     tempId: string
   ) => {
+    // Get the original owner name before making changes
+    const originalOwnerName = getItemOwnerName(type, tempId);
+    if (!originalOwnerName) return;
+
+    const normalizedName = originalOwnerName.toLowerCase();
+
+    // Apply placeholder status to all items with matching owner name
     setProposedItems((prev) => ({
       ...prev,
-      [type]: prev[type].map((item: any) =>
-        item.temp_id === tempId
+      action_items: prev.action_items.map((item: ProposedActionItem) =>
+        item.owner?.name?.toLowerCase() === normalizedName
+          ? {
+              ...item,
+              owner_resolution_status: 'placeholder',
+            }
+          : item
+      ),
+      risks: prev.risks.map((item: ProposedRisk) =>
+        item.owner?.name?.toLowerCase() === normalizedName
           ? {
               ...item,
               owner_resolution_status: 'placeholder',
@@ -237,16 +304,80 @@ export function ReviewUI({
     setNewContactTarget({ type, tempId });
     setNewContactName(ownerName);
     setNewContactEmail('');
+    setForceAddContact(false);
+    setShowSimilarNameWarning(false);
+
+    // Check for similar names
+    const roster = buildPeopleRoster(
+      projectMembers.map((m) => ({
+        id: m.id,
+        full_name: m.full_name,
+        email: m.email,
+      })),
+      projectContacts
+    );
+    const { hasSimilarNames, matches } = findSimilarNames(ownerName, roster);
+
+    if (hasSimilarNames) {
+      setSimilarNameMatches(matches);
+      setShowSimilarNameWarning(true);
+    } else {
+      setSimilarNameMatches([]);
+    }
+
     setNewContactModalOpen(true);
   };
 
+  // Handle selecting an existing match from similar names
+  const selectExistingMatch = (match: PersonMatch) => {
+    if (!newContactTarget) return;
+
+    const newOwner = {
+      name: match.name,
+      email: match.email,
+      resolved_user_id: match.type === 'user' ? match.id : null,
+      resolved_contact_id: match.type === 'contact' ? match.id : null,
+    };
+
+    // Get the original owner name from the target item
+    const originalOwnerName = getItemOwnerName(newContactTarget.type, newContactTarget.tempId);
+    if (originalOwnerName) {
+      // Apply to all items with matching owner name
+      applyOwnerToAllMatching(originalOwnerName, newOwner, 'resolved');
+    }
+
+    // Close modal and reset
+    setNewContactModalOpen(false);
+    setNewContactName('');
+    setNewContactEmail('');
+    setNewContactTarget(null);
+    setSimilarNameMatches([]);
+    setShowSimilarNameWarning(false);
+    setForceAddContact(false);
+  };
+
+  // Confirm adding as new person despite similar names
+  const confirmAddAsNew = () => {
+    setForceAddContact(true);
+    setShowSimilarNameWarning(false);
+  };
+
   // Add a single new contact via API and assign to item
+  // Auto-applies to ALL items with the same owner name
   const addNewContact = async () => {
     if (!newContactName.trim() || !newContactTarget) return;
 
+    // If similar names exist and user hasn't confirmed, block
+    if (showSimilarNameWarning && !forceAddContact) {
+      return;
+    }
+
     setIsAddingContact(true);
     try {
-      const response = await fetch(`/api/projects/${projectId}/contacts`, {
+      // Get the original owner name before making changes
+      const originalOwnerName = getItemOwnerName(newContactTarget.type, newContactTarget.tempId);
+
+      const response = await fetch(`/api/projects/${projectId}/contacts${forceAddContact ? '?force=true' : ''}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -257,6 +388,13 @@ export function ReviewUI({
 
       if (!response.ok) {
         const data = await response.json();
+        // Handle similar names response from server
+        if (data.error === 'similar_names_found' && data.matches) {
+          setSimilarNameMatches(data.matches);
+          setShowSimilarNameWarning(true);
+          setForceAddContact(false);
+          return;
+        }
         throw new Error(data.error || 'Failed to create contact');
       }
 
@@ -265,30 +403,25 @@ export function ReviewUI({
       // Add to local contacts list
       setProjectContacts((prev) => [...prev, contact]);
 
-      // Assign to the target item
-      setProposedItems((prev) => ({
-        ...prev,
-        [newContactTarget.type]: prev[newContactTarget.type].map((item: any) =>
-          item.temp_id === newContactTarget.tempId
-            ? {
-                ...item,
-                owner: {
-                  name: contact.name,
-                  email: contact.email,
-                  resolved_user_id: null,
-                  resolved_contact_id: contact.id,
-                },
-                owner_resolution_status: 'resolved',
-              }
-            : item
-        ),
-      }));
+      // Apply to all items with matching owner name
+      if (originalOwnerName) {
+        const newOwner = {
+          name: contact.name,
+          email: contact.email,
+          resolved_user_id: null,
+          resolved_contact_id: contact.id,
+        };
+        applyOwnerToAllMatching(originalOwnerName, newOwner, 'resolved');
+      }
 
       // Close modal and reset
       setNewContactModalOpen(false);
       setNewContactName('');
       setNewContactEmail('');
       setNewContactTarget(null);
+      setSimilarNameMatches([]);
+      setShowSimilarNameWarning(false);
+      setForceAddContact(false);
     } catch (error) {
       console.error('Failed to add contact:', error);
       alert('Failed to add contact: ' + (error as Error).message);
@@ -1222,34 +1355,83 @@ export function ReviewUI({
           setNewContactName('');
           setNewContactEmail('');
           setNewContactTarget(null);
+          setSimilarNameMatches([]);
+          setShowSimilarNameWarning(false);
+          setForceAddContact(false);
         }}
-        title="Add New Contact"
+        title={showSimilarNameWarning ? 'Similar Name Found' : 'Add New Contact'}
       >
         <div className="space-y-4">
-          <p className="text-sm text-surface-600">
-            Add this person as a project contact. They will be available for assignment on all items in this project.
-          </p>
-          <div>
-            <label className="block text-sm font-medium text-surface-700 mb-1">
-              Name <span className="text-danger-500">*</span>
-            </label>
-            <Input
-              value={newContactName}
-              onChange={(e) => setNewContactName(e.target.value)}
-              placeholder="Contact name"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-surface-700 mb-1">
-              Email <span className="text-surface-400">(optional)</span>
-            </label>
-            <Input
-              type="email"
-              value={newContactEmail}
-              onChange={(e) => setNewContactEmail(e.target.value)}
-              placeholder="contact@example.com"
-            />
-          </div>
+          {/* Similar name warning */}
+          {showSimilarNameWarning && similarNameMatches.length > 0 && (
+            <div className="rounded-lg border border-warning-200 bg-warning-50 p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-warning-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-medium text-warning-700">
+                    Similar name{similarNameMatches.length > 1 ? 's' : ''} already exist{similarNameMatches.length === 1 ? 's' : ''} in this project
+                  </p>
+                  <p className="text-sm text-warning-600 mt-1">
+                    Did you mean one of these people?
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {similarNameMatches.map((match) => (
+                      <button
+                        key={match.id}
+                        onClick={() => selectExistingMatch(match)}
+                        className="w-full flex items-center gap-3 p-3 rounded-lg border border-warning-200 bg-white hover:bg-warning-100 transition-colors text-left"
+                      >
+                        <User className="h-5 w-5 text-surface-500" />
+                        <div className="flex-1">
+                          <p className="font-medium text-surface-900">{match.name}</p>
+                          <p className="text-sm text-surface-500">
+                            {match.email || 'No email'} • {match.type === 'user' ? 'Team Member' : 'Contact'}
+                          </p>
+                        </div>
+                        <Badge variant="default">{Math.round(match.score * 100)}% match</Badge>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={confirmAddAsNew}
+                    className="mt-3 text-sm text-warning-700 hover:text-warning-800 underline"
+                  >
+                    No, add &quot;{newContactName}&quot; as a new person
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Normal form (shown when no warning or after confirming add as new) */}
+          {(!showSimilarNameWarning || forceAddContact) && (
+            <>
+              <p className="text-sm text-surface-600">
+                Add this person as a project contact. They will be available for assignment on all items in this project.
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">
+                  Name <span className="text-danger-500">*</span>
+                </label>
+                <Input
+                  value={newContactName}
+                  onChange={(e) => setNewContactName(e.target.value)}
+                  placeholder="Contact name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">
+                  Email <span className="text-surface-400">(optional)</span>
+                </label>
+                <Input
+                  type="email"
+                  value={newContactEmail}
+                  onChange={(e) => setNewContactEmail(e.target.value)}
+                  placeholder="contact@example.com"
+                />
+              </div>
+            </>
+          )}
         </div>
 
         <ModalFooter>
@@ -1260,18 +1442,23 @@ export function ReviewUI({
               setNewContactName('');
               setNewContactEmail('');
               setNewContactTarget(null);
+              setSimilarNameMatches([]);
+              setShowSimilarNameWarning(false);
+              setForceAddContact(false);
             }}
           >
             Cancel
           </Button>
-          <Button
-            onClick={addNewContact}
-            isLoading={isAddingContact}
-            disabled={!newContactName.trim()}
-          >
-            <UserPlus className="h-4 w-4 mr-1" />
-            Add Contact
-          </Button>
+          {(!showSimilarNameWarning || forceAddContact) && (
+            <Button
+              onClick={addNewContact}
+              isLoading={isAddingContact}
+              disabled={!newContactName.trim()}
+            >
+              <UserPlus className="h-4 w-4 mr-1" />
+              Add Contact
+            </Button>
+          )}
         </ModalFooter>
       </Modal>
     </div>
