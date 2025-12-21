@@ -74,32 +74,57 @@ function transformGoogleEvent(event: GoogleCalendarEvent): CalendarEvent {
   // Extract meeting link (Google Meet or other video conferencing)
   let meetingLink: string | null = null;
   let isGoogleMeet = false;
+  let conferenceProvider: string | null = null;
 
   if (event.hangoutLink) {
     meetingLink = event.hangoutLink;
     isGoogleMeet = true;
+    conferenceProvider = 'Google Meet';
   } else if (event.conferenceData?.entryPoints) {
     const videoEntry = event.conferenceData.entryPoints.find(
       (ep) => ep.entryPointType === 'video'
     );
     if (videoEntry) {
       meetingLink = videoEntry.uri;
-      isGoogleMeet = event.conferenceData.conferenceSolution?.name === 'Google Meet';
+      conferenceProvider = event.conferenceData.conferenceSolution?.name || null;
+      isGoogleMeet = conferenceProvider === 'Google Meet';
+    }
+  }
+
+  // Detect Zoom links in description or location if no conference data
+  if (!meetingLink && (event.description || event.location)) {
+    const zoomRegex = /https:\/\/[\w.-]*zoom\.us\/[^\s<>"]*/i;
+    const textToSearch = `${event.description || ''} ${event.location || ''}`;
+    const zoomMatch = textToSearch.match(zoomRegex);
+    if (zoomMatch) {
+      meetingLink = zoomMatch[0];
+      conferenceProvider = 'Zoom';
     }
   }
 
   // Get start/end times (handle all-day events)
   const startTime = event.start.dateTime || event.start.date || '';
   const endTime = event.end.dateTime || event.end.date || '';
+  const isAllDay = !event.start.dateTime && !!event.start.date;
 
-  // Transform attendees
+  // Transform attendees with response status
   const attendees = (event.attendees || [])
     .filter((a) => !a.self) // Exclude the authenticated user
     .map((a) => ({
       name: a.displayName || null,
       email: a.email || '',
+      responseStatus: a.responseStatus || null,
+      isOrganizer: a.organizer || false,
     }))
     .filter((a) => a.email); // Only include attendees with emails
+
+  // Extract organizer info
+  const organizer = event.organizer?.email
+    ? {
+        name: event.organizer.displayName || null,
+        email: event.organizer.email,
+      }
+    : null;
 
   return {
     id: event.id,
@@ -110,6 +135,11 @@ function transformGoogleEvent(event: GoogleCalendarEvent): CalendarEvent {
     attendees,
     meetingLink,
     isGoogleMeet,
+    location: event.location || null,
+    organizer,
+    isAllDay,
+    calendarLink: event.htmlLink || null,
+    conferenceProvider,
   };
 }
 

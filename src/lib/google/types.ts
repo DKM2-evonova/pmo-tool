@@ -30,6 +30,7 @@ export interface GoogleCalendarEvent {
   id: string;
   summary?: string;
   description?: string;
+  location?: string;
   start: {
     dateTime?: string;
     date?: string;
@@ -70,6 +71,14 @@ export interface GoogleCalendarAttendee {
   organizer?: boolean;
 }
 
+// Attendee with response status for our application
+export interface CalendarAttendee {
+  name: string | null;
+  email: string;
+  responseStatus: 'needsAction' | 'declined' | 'tentative' | 'accepted' | null;
+  isOrganizer: boolean;
+}
+
 // Simplified event for our application
 export interface CalendarEvent {
   id: string;
@@ -77,12 +86,18 @@ export interface CalendarEvent {
   description: string | null;
   startTime: string;
   endTime: string;
-  attendees: Array<{
-    name: string | null;
-    email: string;
-  }>;
+  attendees: CalendarAttendee[];
   meetingLink: string | null;
   isGoogleMeet: boolean;
+  // New fields for enhanced display
+  location: string | null;
+  organizer: {
+    name: string | null;
+    email: string;
+  } | null;
+  isAllDay: boolean;
+  calendarLink: string | null;
+  conferenceProvider: string | null; // "Google Meet", "Zoom", etc.
 }
 
 // Calendar connection status
