@@ -5,4 +5,5 @@ export { Select } from './select';
 export { Badge } from './badge';
 export { Modal, ModalFooter } from './modal';
 export { FilterSelect } from './filter-select';
+export { ErrorBoundary, withErrorBoundary } from './error-boundary';
 

@@ -1,28 +1,28 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { Button, Badge, Modal, ModalFooter, Select, Input, Textarea } from '@/components/ui';
-import {
-  Lock,
-  Unlock,
-  CheckCircle,
-  XCircle,
-  Edit2,
-  AlertTriangle,
-  User,
-  UserPlus,
-  ChevronDown,
-  ChevronUp,
-  Trash2,
-} from 'lucide-react';
-import { cn, formatDateReadable } from '@/lib/utils';
+import { Button } from '@/components/ui';
+import { AlertTriangle, ChevronDown, ChevronUp, UserPlus } from 'lucide-react';
 import { findSimilarNames, buildPeopleRoster, type PersonMatch } from '@/lib/utils/name-matching';
+import {
+  EditItemModal,
+  NewContactModal,
+  LockBanner,
+  LockControls,
+  ActionItemCard,
+  DecisionCard,
+  RiskCard,
+  buildOwnerOptions,
+  type ProposedItems,
+  type EditFormData,
+  type EditingItem,
+  type NewContactTarget,
+} from './review';
 import type {
   ProposedChangeSet,
   ProposedActionItem,
-  ProposedDecision,
   ProposedRisk,
   Profile,
   ProjectContact,
@@ -59,12 +59,8 @@ export function ReviewUI({
   const [hasLock, setHasLock] = useState(
     proposedChangeSet.locked_by_user_id === currentUserId
   );
-  const [proposedItems, setProposedItems] = useState(
-    proposedChangeSet.proposed_items as {
-      action_items: ProposedActionItem[];
-      decisions: ProposedDecision[];
-      risks: ProposedRisk[];
-    }
+  const [proposedItems, setProposedItems] = useState<ProposedItems>(
+    proposedChangeSet.proposed_items as ProposedItems
   );
   const [expandedSections, setExpandedSections] = useState({
     action_items: true,
@@ -72,21 +68,15 @@ export function ReviewUI({
     risks: true,
   });
   const [isPublishing, setIsPublishing] = useState(false);
-  const [editingItem, setEditingItem] = useState<{
-    type: 'action_item' | 'decision' | 'risk';
-    id: string;
-  } | null>(null);
+  const [editingItem, setEditingItem] = useState<EditingItem | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editFormData, setEditFormData] = useState<any>({});
+  const [editFormData, setEditFormData] = useState<EditFormData>({});
 
   // New contact modal state
   const [newContactModalOpen, setNewContactModalOpen] = useState(false);
   const [newContactName, setNewContactName] = useState('');
   const [newContactEmail, setNewContactEmail] = useState('');
-  const [newContactTarget, setNewContactTarget] = useState<{
-    type: 'action_items' | 'risks';
-    tempId: string;
-  } | null>(null);
+  const [newContactTarget, setNewContactTarget] = useState<NewContactTarget | null>(null);
   const [isAddingContact, setIsAddingContact] = useState(false);
   const [isAddingAllContacts, setIsAddingAllContacts] = useState(false);
 
@@ -95,8 +85,14 @@ export function ReviewUI({
   const [showSimilarNameWarning, setShowSimilarNameWarning] = useState(false);
   const [forceAddContact, setForceAddContact] = useState(false);
 
+  // Memoized owner options for dropdowns
+  const ownerOptions = useMemo(
+    () => buildOwnerOptions(projectMembers, projectContacts),
+    [projectMembers, projectContacts]
+  );
+
   // Acquire lock when entering review mode
-  const acquireLock = async () => {
+  const acquireLock = useCallback(async () => {
     try {
       const { data, error } = await supabase.rpc('acquire_change_set_lock', {
         p_change_set_id: proposedChangeSet.id,
@@ -117,10 +113,10 @@ export function ReviewUI({
     } catch (error) {
       console.error('Failed to acquire lock:', error);
     }
-  };
+  }, [supabase, proposedChangeSet.id, proposedChangeSet.lock_version, currentUserId, router]);
 
   // Release lock
-  const releaseLock = async () => {
+  const releaseLock = useCallback(async () => {
     try {
       await supabase.rpc('release_change_set_lock', {
         p_change_set_id: proposedChangeSet.id,
@@ -131,10 +127,10 @@ export function ReviewUI({
     } catch (error) {
       console.error('Failed to release lock:', error);
     }
-  };
+  }, [supabase, proposedChangeSet.id, currentUserId, router]);
 
   // Force unlock (admin only)
-  const forceUnlock = async () => {
+  const forceUnlock = useCallback(async () => {
     if (!confirm('Are you sure you want to force unlock?')) return;
 
     try {
@@ -145,208 +141,191 @@ export function ReviewUI({
     } catch (error) {
       console.error('Failed to force unlock:', error);
     }
-  };
+  }, [supabase, proposedChangeSet.id, router]);
 
   // Toggle item acceptance
-  const toggleAccept = (
-    type: 'action_items' | 'decisions' | 'risks',
-    tempId: string
-  ) => {
-    setProposedItems((prev) => ({
-      ...prev,
-      [type]: prev[type].map((item: any) =>
-        item.temp_id === tempId ? { ...item, accepted: !item.accepted } : item
-      ),
-    }));
-  };
+  const toggleAccept = useCallback(
+    (type: 'action_items' | 'decisions' | 'risks', tempId: string) => {
+      setProposedItems((prev) => ({
+        ...prev,
+        [type]: prev[type].map((item) =>
+          item.temp_id === tempId ? { ...item, accepted: !item.accepted } : item
+        ),
+      }));
+    },
+    []
+  );
 
   // Helper to get original owner name from an item
-  const getItemOwnerName = (type: 'action_items' | 'risks', tempId: string): string | null => {
-    const items = proposedItems[type] as any[];
-    const item = items.find((i) => i.temp_id === tempId);
-    return item?.owner?.name || null;
-  };
-
-  // Helper to count items with matching owner name
-  const countItemsWithOwnerName = (ownerName: string): number => {
-    const normalizedName = ownerName.toLowerCase();
-    let count = 0;
-    proposedItems.action_items.forEach((item) => {
-      if (item.owner?.name?.toLowerCase() === normalizedName) count++;
-    });
-    proposedItems.risks.forEach((item) => {
-      if (item.owner?.name?.toLowerCase() === normalizedName) count++;
-    });
-    return count;
-  };
+  const getItemOwnerName = useCallback(
+    (type: 'action_items' | 'risks', tempId: string): string | null => {
+      const items = proposedItems[type];
+      const item = items.find((i) => i.temp_id === tempId);
+      return item?.owner?.name || null;
+    },
+    [proposedItems]
+  );
 
   // Apply owner resolution to all items with matching owner name
-  const applyOwnerToAllMatching = (
-    ownerName: string,
-    newOwner: {
-      name: string;
-      email: string | null;
-      resolved_user_id: string | null;
-      resolved_contact_id: string | null;
-    },
-    newStatus: string
-  ) => {
-    const normalizedName = ownerName.toLowerCase();
+  const applyOwnerToAllMatching = useCallback(
+    (
+      ownerName: string,
+      newOwner: {
+        name: string;
+        email: string | null;
+        resolved_user_id: string | null;
+        resolved_contact_id: string | null;
+      },
+      newStatus: string
+    ) => {
+      const normalizedName = ownerName.toLowerCase();
 
-    setProposedItems((prev) => ({
-      ...prev,
-      action_items: prev.action_items.map((item: ProposedActionItem) =>
-        item.owner?.name?.toLowerCase() === normalizedName
-          ? {
-              ...item,
-              owner: newOwner,
-              owner_resolution_status: newStatus,
-            }
-          : item
-      ),
-      risks: prev.risks.map((item: ProposedRisk) =>
-        item.owner?.name?.toLowerCase() === normalizedName
-          ? {
-              ...item,
-              owner: newOwner,
-              owner_resolution_status: newStatus,
-            }
-          : item
-      ),
-    }));
-  };
+      setProposedItems((prev) => ({
+        ...prev,
+        action_items: prev.action_items.map((item: ProposedActionItem) =>
+          item.owner?.name?.toLowerCase() === normalizedName
+            ? { ...item, owner: newOwner, owner_resolution_status: newStatus }
+            : item
+        ),
+        risks: prev.risks.map((item: ProposedRisk) =>
+          item.owner?.name?.toLowerCase() === normalizedName
+            ? { ...item, owner: newOwner, owner_resolution_status: newStatus }
+            : item
+        ),
+      }));
+    },
+    []
+  );
 
   // Update owner resolution (handles both users and contacts)
-  // Auto-applies to ALL items with the same owner name
-  const updateOwner = (
-    type: 'action_items' | 'risks',
-    tempId: string,
-    selectedValue: string
-  ) => {
-    // Get the original owner name before making changes
-    const originalOwnerName = getItemOwnerName(type, tempId);
-    if (!originalOwnerName) return;
+  const updateOwner = useCallback(
+    (type: 'action_items' | 'risks', tempId: string, selectedValue: string) => {
+      const originalOwnerName = getItemOwnerName(type, tempId);
+      if (!originalOwnerName) return;
 
-    // Value is prefixed with 'user:' or 'contact:'
-    const [ownerType, id] = selectedValue.includes(':')
-      ? selectedValue.split(':')
-      : ['user', selectedValue]; // Fallback for backwards compatibility
+      const [ownerType, id] = selectedValue.includes(':')
+        ? selectedValue.split(':')
+        : ['user', selectedValue];
 
-    if (ownerType === 'user') {
-      const member = projectMembers.find((m) => m.id === id);
-      if (!member) return;
+      if (ownerType === 'user') {
+        const member = projectMembers.find((m) => m.id === id);
+        if (!member) return;
 
-      const newOwner = {
-        name: member.full_name || member.email,
-        email: member.email,
-        resolved_user_id: member.id,
-        resolved_contact_id: null,
-      };
+        const newOwner = {
+          name: member.full_name || member.email,
+          email: member.email,
+          resolved_user_id: member.id,
+          resolved_contact_id: null,
+        };
+        applyOwnerToAllMatching(originalOwnerName, newOwner, 'resolved');
+      } else if (ownerType === 'contact') {
+        const contact = projectContacts.find((c) => c.id === id);
+        if (!contact) return;
 
-      // Apply to all items with matching owner name
-      applyOwnerToAllMatching(originalOwnerName, newOwner, 'resolved');
-    } else if (ownerType === 'contact') {
-      const contact = projectContacts.find((c) => c.id === id);
-      if (!contact) return;
-
-      const newOwner = {
-        name: contact.name,
-        email: contact.email,
-        resolved_user_id: null,
-        resolved_contact_id: contact.id,
-      };
-
-      // Apply to all items with matching owner name
-      applyOwnerToAllMatching(originalOwnerName, newOwner, 'resolved');
-    }
-  };
+        const newOwner = {
+          name: contact.name,
+          email: contact.email,
+          resolved_user_id: null,
+          resolved_contact_id: contact.id,
+        };
+        applyOwnerToAllMatching(originalOwnerName, newOwner, 'resolved');
+      }
+    },
+    [projectMembers, projectContacts, getItemOwnerName, applyOwnerToAllMatching]
+  );
 
   // Accept unknown owner as placeholder
-  // Auto-applies to ALL items with the same owner name
-  const acceptAsPlaceholder = (
-    type: 'action_items' | 'risks',
-    tempId: string
-  ) => {
-    // Get the original owner name before making changes
-    const originalOwnerName = getItemOwnerName(type, tempId);
-    if (!originalOwnerName) return;
+  const acceptAsPlaceholder = useCallback(
+    (type: 'action_items' | 'risks', tempId: string) => {
+      const originalOwnerName = getItemOwnerName(type, tempId);
+      if (!originalOwnerName) return;
 
-    const normalizedName = originalOwnerName.toLowerCase();
+      const normalizedName = originalOwnerName.toLowerCase();
 
-    // Apply placeholder status to all items with matching owner name
-    setProposedItems((prev) => ({
-      ...prev,
-      action_items: prev.action_items.map((item: ProposedActionItem) =>
-        item.owner?.name?.toLowerCase() === normalizedName
-          ? {
-              ...item,
-              owner_resolution_status: 'placeholder',
-            }
-          : item
-      ),
-      risks: prev.risks.map((item: ProposedRisk) =>
-        item.owner?.name?.toLowerCase() === normalizedName
-          ? {
-              ...item,
-              owner_resolution_status: 'placeholder',
-            }
-          : item
-      ),
-    }));
-  };
+      setProposedItems((prev) => ({
+        ...prev,
+        action_items: prev.action_items.map((item: ProposedActionItem) =>
+          item.owner?.name?.toLowerCase() === normalizedName
+            ? { ...item, owner_resolution_status: 'placeholder' }
+            : item
+        ),
+        risks: prev.risks.map((item: ProposedRisk) =>
+          item.owner?.name?.toLowerCase() === normalizedName
+            ? { ...item, owner_resolution_status: 'placeholder' }
+            : item
+        ),
+      }));
+    },
+    [getItemOwnerName]
+  );
 
   // Open modal to add new contact for a specific item
-  const openAddContactModal = (
-    type: 'action_items' | 'risks',
-    tempId: string,
-    ownerName: string
-  ) => {
-    setNewContactTarget({ type, tempId });
-    setNewContactName(ownerName);
-    setNewContactEmail('');
-    setForceAddContact(false);
-    setShowSimilarNameWarning(false);
+  const openAddContactModal = useCallback(
+    (type: 'action_items' | 'risks', tempId: string, ownerName: string) => {
+      setNewContactTarget({ type, tempId });
+      setNewContactName(ownerName);
+      setNewContactEmail('');
+      setForceAddContact(false);
+      setShowSimilarNameWarning(false);
 
-    // Check for similar names
-    const roster = buildPeopleRoster(
-      projectMembers.map((m) => ({
-        id: m.id,
-        full_name: m.full_name,
-        email: m.email,
-      })),
-      projectContacts
-    );
-    const { hasSimilarNames, matches } = findSimilarNames(ownerName, roster);
+      const roster = buildPeopleRoster(
+        projectMembers.map((m) => ({
+          id: m.id,
+          full_name: m.full_name,
+          email: m.email,
+        })),
+        projectContacts
+      );
+      const { hasSimilarNames, matches } = findSimilarNames(ownerName, roster);
 
-    if (hasSimilarNames) {
-      setSimilarNameMatches(matches);
-      setShowSimilarNameWarning(true);
-    } else {
-      setSimilarNameMatches([]);
-    }
+      if (hasSimilarNames) {
+        setSimilarNameMatches(matches);
+        setShowSimilarNameWarning(true);
+      } else {
+        setSimilarNameMatches([]);
+      }
 
-    setNewContactModalOpen(true);
-  };
+      setNewContactModalOpen(true);
+    },
+    [projectMembers, projectContacts]
+  );
 
   // Handle selecting an existing match from similar names
-  const selectExistingMatch = (match: PersonMatch) => {
-    if (!newContactTarget) return;
+  const selectExistingMatch = useCallback(
+    (match: PersonMatch) => {
+      if (!newContactTarget) return;
 
-    const newOwner = {
-      name: match.name,
-      email: match.email,
-      resolved_user_id: match.type === 'user' ? match.id : null,
-      resolved_contact_id: match.type === 'contact' ? match.id : null,
-    };
+      const newOwner = {
+        name: match.name,
+        email: match.email,
+        resolved_user_id: match.type === 'user' ? match.id : null,
+        resolved_contact_id: match.type === 'contact' ? match.id : null,
+      };
 
-    // Get the original owner name from the target item
-    const originalOwnerName = getItemOwnerName(newContactTarget.type, newContactTarget.tempId);
-    if (originalOwnerName) {
-      // Apply to all items with matching owner name
-      applyOwnerToAllMatching(originalOwnerName, newOwner, 'resolved');
-    }
+      const originalOwnerName = getItemOwnerName(newContactTarget.type, newContactTarget.tempId);
+      if (originalOwnerName) {
+        applyOwnerToAllMatching(originalOwnerName, newOwner, 'resolved');
+      }
 
-    // Close modal and reset
+      setNewContactModalOpen(false);
+      setNewContactName('');
+      setNewContactEmail('');
+      setNewContactTarget(null);
+      setSimilarNameMatches([]);
+      setShowSimilarNameWarning(false);
+      setForceAddContact(false);
+    },
+    [newContactTarget, getItemOwnerName, applyOwnerToAllMatching]
+  );
+
+  // Confirm adding as new person despite similar names
+  const confirmAddAsNew = useCallback(() => {
+    setForceAddContact(true);
+    setShowSimilarNameWarning(false);
+  }, []);
+
+  // Close new contact modal
+  const closeNewContactModal = useCallback(() => {
     setNewContactModalOpen(false);
     setNewContactName('');
     setNewContactEmail('');
@@ -354,41 +333,34 @@ export function ReviewUI({
     setSimilarNameMatches([]);
     setShowSimilarNameWarning(false);
     setForceAddContact(false);
-  };
-
-  // Confirm adding as new person despite similar names
-  const confirmAddAsNew = () => {
-    setForceAddContact(true);
-    setShowSimilarNameWarning(false);
-  };
+  }, []);
 
   // Add a single new contact via API and assign to item
-  // Auto-applies to ALL items with the same owner name
-  const addNewContact = async () => {
+  const addNewContact = useCallback(async () => {
     if (!newContactName.trim() || !newContactTarget) return;
 
-    // If similar names exist and user hasn't confirmed, block
     if (showSimilarNameWarning && !forceAddContact) {
       return;
     }
 
     setIsAddingContact(true);
     try {
-      // Get the original owner name before making changes
       const originalOwnerName = getItemOwnerName(newContactTarget.type, newContactTarget.tempId);
 
-      const response = await fetch(`/api/projects/${projectId}/contacts${forceAddContact ? '?force=true' : ''}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newContactName.trim(),
-          email: newContactEmail.trim() || undefined,
-        }),
-      });
+      const response = await fetch(
+        `/api/projects/${projectId}/contacts${forceAddContact ? '?force=true' : ''}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: newContactName.trim(),
+            email: newContactEmail.trim() || undefined,
+          }),
+        }
+      );
 
       if (!response.ok) {
         const data = await response.json();
-        // Handle similar names response from server
         if (data.error === 'similar_names_found' && data.matches) {
           setSimilarNameMatches(data.matches);
           setShowSimilarNameWarning(true);
@@ -400,10 +372,8 @@ export function ReviewUI({
 
       const { contact } = await response.json();
 
-      // Add to local contacts list
       setProjectContacts((prev) => [...prev, contact]);
 
-      // Apply to all items with matching owner name
       if (originalOwnerName) {
         const newOwner = {
           name: contact.name,
@@ -414,58 +384,67 @@ export function ReviewUI({
         applyOwnerToAllMatching(originalOwnerName, newOwner, 'resolved');
       }
 
-      // Close modal and reset
-      setNewContactModalOpen(false);
-      setNewContactName('');
-      setNewContactEmail('');
-      setNewContactTarget(null);
-      setSimilarNameMatches([]);
-      setShowSimilarNameWarning(false);
-      setForceAddContact(false);
+      closeNewContactModal();
     } catch (error) {
       console.error('Failed to add contact:', error);
       alert('Failed to add contact: ' + (error as Error).message);
     } finally {
       setIsAddingContact(false);
     }
-  };
+  }, [
+    newContactName,
+    newContactEmail,
+    newContactTarget,
+    showSimilarNameWarning,
+    forceAddContact,
+    projectId,
+    getItemOwnerName,
+    applyOwnerToAllMatching,
+    closeNewContactModal,
+  ]);
 
   // Get all unique unresolved owner names from action items and risks
-  const getUnresolvedOwnerNames = () => {
-    const unresolvedNames = new Map<string, { type: 'action_items' | 'risks'; tempId: string }[]>();
+  const unresolvedOwnerNames = useMemo(() => {
+    const names = new Map<string, { type: 'action_items' | 'risks'; tempId: string }[]>();
 
     proposedItems.action_items
-      .filter((item) => item.accepted && ['unknown', 'ambiguous', 'conference_room'].includes(item.owner_resolution_status))
+      .filter(
+        (item) =>
+          item.accepted &&
+          ['unknown', 'ambiguous', 'conference_room'].includes(item.owner_resolution_status)
+      )
       .forEach((item) => {
         const name = item.owner.name;
-        if (!unresolvedNames.has(name)) {
-          unresolvedNames.set(name, []);
+        if (!names.has(name)) {
+          names.set(name, []);
         }
-        unresolvedNames.get(name)!.push({ type: 'action_items', tempId: item.temp_id });
+        names.get(name)!.push({ type: 'action_items', tempId: item.temp_id });
       });
 
     proposedItems.risks
-      .filter((item) => item.accepted && ['unknown', 'ambiguous', 'conference_room'].includes(item.owner_resolution_status))
+      .filter(
+        (item) =>
+          item.accepted &&
+          ['unknown', 'ambiguous', 'conference_room'].includes(item.owner_resolution_status)
+      )
       .forEach((item) => {
         const name = item.owner.name;
-        if (!unresolvedNames.has(name)) {
-          unresolvedNames.set(name, []);
+        if (!names.has(name)) {
+          names.set(name, []);
         }
-        unresolvedNames.get(name)!.push({ type: 'risks', tempId: item.temp_id });
+        names.get(name)!.push({ type: 'risks', tempId: item.temp_id });
       });
 
-    return unresolvedNames;
-  };
+    return names;
+  }, [proposedItems]);
 
   // Add all unresolved names as contacts
-  const addAllNewContacts = async () => {
-    const unresolvedNames = getUnresolvedOwnerNames();
-    if (unresolvedNames.size === 0) return;
+  const addAllNewContacts = useCallback(async () => {
+    if (unresolvedOwnerNames.size === 0) return;
 
     setIsAddingAllContacts(true);
     try {
-      for (const [name, items] of unresolvedNames) {
-        // Create contact
+      for (const [name, items] of unresolvedOwnerNames) {
         const response = await fetch(`/api/projects/${projectId}/contacts`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -473,37 +452,39 @@ export function ReviewUI({
         });
 
         if (!response.ok) {
-          const data = await response.json();
-          // Skip if contact already exists, continue with others
           if (response.status === 409) continue;
+          const data = await response.json();
           throw new Error(data.error || 'Failed to create contact');
         }
 
         const { contact } = await response.json();
 
-        // Add to local contacts list
         setProjectContacts((prev) => [...prev, contact]);
 
-        // Update all items with this owner name
         setProposedItems((prev) => {
-          const updated = { ...prev };
-          for (const item of items) {
-            updated[item.type] = updated[item.type].map((i: any) =>
-              i.temp_id === item.tempId
-                ? {
-                    ...i,
-                    owner: {
-                      name: contact.name,
-                      email: contact.email,
-                      resolved_user_id: null,
-                      resolved_contact_id: contact.id,
-                    },
-                    owner_resolution_status: 'resolved',
-                  }
+          const newOwner = {
+            name: contact.name,
+            email: contact.email,
+            resolved_user_id: null,
+            resolved_contact_id: contact.id,
+          };
+
+          const actionItemIds = items.filter(i => i.type === 'action_items').map(i => i.tempId);
+          const riskIds = items.filter(i => i.type === 'risks').map(i => i.tempId);
+
+          return {
+            ...prev,
+            action_items: prev.action_items.map((i) =>
+              actionItemIds.includes(i.temp_id)
+                ? { ...i, owner: newOwner, owner_resolution_status: 'resolved' }
                 : i
-            );
-          }
-          return updated;
+            ),
+            risks: prev.risks.map((i) =>
+              riskIds.includes(i.temp_id)
+                ? { ...i, owner: newOwner, owner_resolution_status: 'resolved' }
+                : i
+            ),
+          };
         });
       }
     } catch (error) {
@@ -512,51 +493,70 @@ export function ReviewUI({
     } finally {
       setIsAddingAllContacts(false);
     }
-  };
+  }, [unresolvedOwnerNames, projectId]);
 
   // Start editing an item
-  const startEditing = (type: 'action_items' | 'decisions' | 'risks', tempId: string) => {
-    const item = proposedItems[type].find((item: any) => item.temp_id === tempId);
-    if (!item) return;
+  const startEditing = useCallback(
+    (type: 'action_items' | 'decisions' | 'risks', tempId: string) => {
+      const item = proposedItems[type].find((item) => item.temp_id === tempId);
+      if (!item) return;
 
-    setEditingItem({ type: type.replace('_items', '_item') as any, id: tempId });
-    setEditFormData({ ...item });
-    setEditModalOpen(true);
-  };
+      setEditingItem({
+        type: type.replace('_items', '_item').replace('decisions', 'decision') as EditingItem['type'],
+        id: tempId,
+      });
+      setEditFormData({ ...item });
+      setEditModalOpen(true);
+    },
+    [proposedItems]
+  );
+
+  // Close edit modal
+  const closeEditModal = useCallback(() => {
+    setEditModalOpen(false);
+    setEditingItem(null);
+    setEditFormData({});
+  }, []);
 
   // Save edited item
-  const saveEditedItem = () => {
+  const saveEditedItem = useCallback(() => {
     if (!editingItem) return;
 
-    const type = editingItem.type === 'action_item' ? 'action_items' :
-                 editingItem.type === 'decision' ? 'decisions' : 'risks';
+    const type =
+      editingItem.type === 'action_item'
+        ? 'action_items'
+        : editingItem.type === 'decision'
+          ? 'decisions'
+          : 'risks';
 
     setProposedItems((prev) => ({
       ...prev,
-      [type]: prev[type].map((item: any) =>
+      [type]: prev[type].map((item) =>
         item.temp_id === editingItem.id ? { ...item, ...editFormData } : item
       ),
     }));
 
-    setEditModalOpen(false);
-    setEditingItem(null);
-    setEditFormData({});
-  };
+    closeEditModal();
+  }, [editingItem, editFormData, closeEditModal]);
 
   // Reject an item (set accepted to false)
-  const rejectItem = (type: 'action_items' | 'decisions' | 'risks', tempId: string) => {
-    if (!confirm('Are you sure you want to reject this item? It will not be included when publishing.')) return;
+  const rejectItem = useCallback(
+    (type: 'action_items' | 'decisions' | 'risks', tempId: string) => {
+      if (!confirm('Are you sure you want to reject this item? It will not be included when publishing.'))
+        return;
 
-    setProposedItems((prev) => ({
-      ...prev,
-      [type]: prev[type].map((item: any) =>
-        item.temp_id === tempId ? { ...item, accepted: false } : item
-      ),
-    }));
-  };
+      setProposedItems((prev) => ({
+        ...prev,
+        [type]: prev[type].map((item) =>
+          item.temp_id === tempId ? { ...item, accepted: false } : item
+        ),
+      }));
+    },
+    []
+  );
 
   // Save changes
-  const saveChanges = async () => {
+  const saveChanges = useCallback(async () => {
     try {
       const { error } = await supabase
         .from('proposed_change_sets')
@@ -568,32 +568,23 @@ export function ReviewUI({
       console.error('Failed to save changes:', error);
       alert('Failed to save changes');
     }
-  };
+  }, [supabase, proposedItems, proposedChangeSet.id]);
 
   // Check if can publish (only truly blocking issues)
-  const canPublish = () => {
-    // Only block on ambiguous and conference_room owners
-    // Unknown owners can be published as placeholders
+  const canPublish = useMemo(() => {
     const blockingActionItems = proposedItems.action_items.filter(
       (ai) =>
-        ai.accepted &&
-        ['ambiguous', 'conference_room'].includes(
-          ai.owner_resolution_status
-        )
+        ai.accepted && ['ambiguous', 'conference_room'].includes(ai.owner_resolution_status)
     );
     const blockingRisks = proposedItems.risks.filter(
-      (r) =>
-        r.accepted &&
-        ['ambiguous', 'conference_room'].includes(
-          r.owner_resolution_status
-        )
+      (r) => r.accepted && ['ambiguous', 'conference_room'].includes(r.owner_resolution_status)
     );
     return blockingActionItems.length === 0 && blockingRisks.length === 0;
-  };
+  }, [proposedItems]);
 
   // Publish changes
-  const handlePublish = async () => {
-    if (!canPublish()) {
+  const handlePublish = useCallback(async () => {
+    if (!canPublish) {
       alert('Please resolve all owners before publishing');
       return;
     }
@@ -620,117 +611,139 @@ export function ReviewUI({
     } finally {
       setIsPublishing(false);
     }
-  };
+  }, [canPublish, saveChanges, meetingId, router]);
 
-  const operationBadge = (op: string) => {
-    const variants: Record<string, 'success' | 'warning' | 'default'> = {
-      create: 'success',
-      update: 'warning',
-      close: 'default',
-    };
-    return <Badge variant={variants[op] || 'default'}>{op}</Badge>;
-  };
+  // Section toggle handlers
+  const toggleActionItems = useCallback(() => {
+    setExpandedSections((s) => ({ ...s, action_items: !s.action_items }));
+  }, []);
 
-  const resolutionStatusBadge = (status: string) => {
-    const config: Record<string, { variant: 'success' | 'warning' | 'danger' | 'primary'; label: string }> = {
-      resolved: { variant: 'success', label: 'Resolved' },
-      needs_confirmation: { variant: 'warning', label: 'Needs Confirmation' },
-      ambiguous: { variant: 'danger', label: 'Ambiguous' },
-      conference_room: { variant: 'danger', label: 'Conference Room' },
-      unknown: { variant: 'danger', label: 'Unknown' },
-      placeholder: { variant: 'primary', label: 'Placeholder' },
-    };
-    const { variant, label } = config[status] || { variant: 'default' as any, label: status };
-    return <Badge variant={variant}>{label}</Badge>;
-  };
+  const toggleDecisions = useCallback(() => {
+    setExpandedSections((s) => ({ ...s, decisions: !s.decisions }));
+  }, []);
+
+  const toggleRisks = useCallback(() => {
+    setExpandedSections((s) => ({ ...s, risks: !s.risks }));
+  }, []);
+
+  // Callback wrappers for card components
+  const handleActionItemToggleAccept = useCallback(
+    (tempId: string) => toggleAccept('action_items', tempId),
+    [toggleAccept]
+  );
+
+  const handleActionItemEdit = useCallback(
+    (tempId: string) => startEditing('action_items', tempId),
+    [startEditing]
+  );
+
+  const handleActionItemReject = useCallback(
+    (tempId: string) => rejectItem('action_items', tempId),
+    [rejectItem]
+  );
+
+  const handleActionItemUpdateOwner = useCallback(
+    (tempId: string, value: string) => updateOwner('action_items', tempId, value),
+    [updateOwner]
+  );
+
+  const handleActionItemPlaceholder = useCallback(
+    (tempId: string) => acceptAsPlaceholder('action_items', tempId),
+    [acceptAsPlaceholder]
+  );
+
+  const handleActionItemAddContact = useCallback(
+    (tempId: string, ownerName: string) => openAddContactModal('action_items', tempId, ownerName),
+    [openAddContactModal]
+  );
+
+  const handleDecisionToggleAccept = useCallback(
+    (tempId: string) => toggleAccept('decisions', tempId),
+    [toggleAccept]
+  );
+
+  const handleDecisionEdit = useCallback(
+    (tempId: string) => startEditing('decisions', tempId),
+    [startEditing]
+  );
+
+  const handleDecisionReject = useCallback(
+    (tempId: string) => rejectItem('decisions', tempId),
+    [rejectItem]
+  );
+
+  const handleRiskToggleAccept = useCallback(
+    (tempId: string) => toggleAccept('risks', tempId),
+    [toggleAccept]
+  );
+
+  const handleRiskEdit = useCallback(
+    (tempId: string) => startEditing('risks', tempId),
+    [startEditing]
+  );
+
+  const handleRiskReject = useCallback(
+    (tempId: string) => rejectItem('risks', tempId),
+    [rejectItem]
+  );
+
+  const handleRiskUpdateOwner = useCallback(
+    (tempId: string, value: string) => updateOwner('risks', tempId, value),
+    [updateOwner]
+  );
+
+  const handleRiskPlaceholder = useCallback(
+    (tempId: string) => acceptAsPlaceholder('risks', tempId),
+    [acceptAsPlaceholder]
+  );
+
+  const handleRiskAddContact = useCallback(
+    (tempId: string, ownerName: string) => openAddContactModal('risks', tempId, ownerName),
+    [openAddContactModal]
+  );
 
   // Lock banner
   if (isLocked && lockHolder) {
     return (
-      <div className="card border-warning-200 bg-warning-50">
-        <div className="flex items-center gap-3">
-          <Lock className="h-5 w-5 text-warning-600" />
-          <div className="flex-1">
-            <p className="font-medium text-warning-700">
-              Locked by {lockHolder.full_name || lockHolder.email}
-            </p>
-            <p className="text-sm text-warning-600">
-              Currently reviewing. Please wait or contact them.
-            </p>
-          </div>
-          {isAdmin && (
-            <Button variant="ghost" size="sm" onClick={forceUnlock}>
-              <Unlock className="h-4 w-4" />
-              Force Unlock
-            </Button>
-          )}
-        </div>
-      </div>
+      <LockBanner lockHolder={lockHolder} isAdmin={isAdmin} onForceUnlock={forceUnlock} />
     );
   }
 
   return (
     <div className="space-y-6">
       {/* Lock controls */}
-      <div className="card flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {hasLock ? (
-            <>
-              <Lock className="h-5 w-5 text-success-500" />
-              <span className="text-sm text-surface-600">
-                You are reviewing this meeting
-              </span>
-            </>
-          ) : (
-            <>
-              <Unlock className="h-5 w-5 text-surface-400" />
-              <span className="text-sm text-surface-600">
-                Click to start reviewing
-              </span>
-            </>
-          )}
-        </div>
-        <div className="flex gap-2">
-          {hasLock ? (
-            <>
-              <Button variant="secondary" onClick={releaseLock}>
-                Release Lock
-              </Button>
-              <Button
-                onClick={handlePublish}
-                isLoading={isPublishing}
-                disabled={!canPublish()}
-              >
-                Publish Changes
-              </Button>
-            </>
-          ) : (
-            <Button onClick={acquireLock}>Start Review</Button>
-          )}
-        </div>
-      </div>
+      <LockControls
+        hasLock={hasLock}
+        isPublishing={isPublishing}
+        canPublish={canPublish}
+        onAcquireLock={acquireLock}
+        onReleaseLock={releaseLock}
+        onPublish={handlePublish}
+      />
 
       {/* Warning if blocking owner issues */}
-      {!canPublish() && hasLock && (
+      {!canPublish && hasLock && (
         <div className="card border-warning-200 bg-warning-50">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-warning-600" />
             <p className="text-warning-700">
-              Some owners have ambiguous or invalid assignments that must be resolved before publishing
+              Some owners have ambiguous or invalid assignments that must be resolved before
+              publishing
             </p>
           </div>
         </div>
       )}
 
       {/* Add All New Names button when there are unresolved owners */}
-      {hasLock && getUnresolvedOwnerNames().size > 0 && (
+      {hasLock && unresolvedOwnerNames.size > 0 && (
         <div className="card border-primary-200 bg-primary-50">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <UserPlus className="h-5 w-5 text-primary-600" />
               <div>
                 <p className="font-medium text-primary-700">
-                  {getUnresolvedOwnerNames().size} unresolved name{getUnresolvedOwnerNames().size !== 1 ? 's' : ''} found
+                  {unresolvedOwnerNames.size} unresolved name
+                  {unresolvedOwnerNames.size !== 1 ? 's' : ''} found
                 </p>
                 <p className="text-sm text-primary-600">
                   Add all new names as project contacts in one click
@@ -752,15 +765,7 @@ export function ReviewUI({
 
       {/* Action Items Section */}
       <div className="card">
-        <button
-          onClick={() =>
-            setExpandedSections((s) => ({
-              ...s,
-              action_items: !s.action_items,
-            }))
-          }
-          className="flex w-full items-center justify-between"
-        >
+        <button onClick={toggleActionItems} className="flex w-full items-center justify-between">
           <h2 className="text-lg font-semibold text-surface-900">
             Action Items ({proposedItems.action_items.length})
           </h2>
@@ -777,169 +782,18 @@ export function ReviewUI({
               <p className="text-surface-500">No action items extracted</p>
             ) : (
               proposedItems.action_items.map((item) => (
-                <div
+                <ActionItemCard
                   key={item.temp_id}
-                  className={cn(
-                    'rounded-lg border p-4',
-                    item.accepted
-                      ? 'border-surface-200 bg-white'
-                      : 'border-surface-200 bg-surface-50 opacity-60'
-                  )}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        {operationBadge(item.operation)}
-                        <h3 className="font-medium text-surface-900">
-                          {item.title}
-                        </h3>
-                      </div>
-                      <p className="mt-1 text-sm text-surface-600">
-                        {item.description}
-                      </p>
-                      <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
-                        <span className="flex items-center gap-1 text-surface-500">
-                          <User className="h-4 w-4" />
-                          {item.owner.name}
-                          {resolutionStatusBadge(item.owner_resolution_status)}
-                        </span>
-                        {item.due_date && (
-                          <span className="text-surface-500">
-                            Due: {formatDateReadable(item.due_date)}
-                          </span>
-                        )}
-                      </div>
-                      {/* Owner resolution controls */}
-                      {hasLock &&
-                        ['unknown', 'ambiguous', 'conference_room', 'needs_confirmation'].includes(
-                          item.owner_resolution_status
-                        ) && (
-                          <div className="mt-3 space-y-2">
-                            {item.owner_resolution_status === 'unknown' && (
-                              <div className="flex flex-wrap gap-2">
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => acceptAsPlaceholder('action_items', item.temp_id)}
-                                >
-                                  Accept as Placeholder
-                                </Button>
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => openAddContactModal('action_items', item.temp_id, item.owner.name)}
-                                >
-                                  <UserPlus className="h-3 w-3 mr-1" />
-                                  Add as Contact
-                                </Button>
-                                <span className="text-xs text-surface-500 self-center">
-                                  or select existing:
-                                </span>
-                              </div>
-                            )}
-                            {['ambiguous', 'conference_room', 'needs_confirmation'].includes(item.owner_resolution_status) && (
-                              <div className="flex gap-2 mb-2">
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => openAddContactModal('action_items', item.temp_id, item.owner.name)}
-                                >
-                                  <UserPlus className="h-3 w-3 mr-1" />
-                                  Add &quot;{item.owner.name}&quot; as Contact
-                                </Button>
-                              </div>
-                            )}
-                            <Select
-                              value={
-                                item.owner.resolved_user_id
-                                  ? `user:${item.owner.resolved_user_id}`
-                                  : item.owner.resolved_contact_id
-                                    ? `contact:${item.owner.resolved_contact_id}`
-                                    : ''
-                              }
-                              onChange={(e) =>
-                                updateOwner(
-                                  'action_items',
-                                  item.temp_id,
-                                  e.target.value
-                                )
-                              }
-                              options={[
-                                ...projectMembers.map((m) => ({
-                                  value: `user:${m.id}`,
-                                  label: m.full_name || m.email,
-                                })),
-                                ...projectContacts.map((c) => ({
-                                  value: `contact:${c.id}`,
-                                  label: `${c.name}${c.email ? ` (${c.email})` : ''} [Contact]`,
-                                })),
-                              ]}
-                              placeholder="Select existing member or contact"
-                              className="w-64"
-                            />
-                          </div>
-                        )}
-                      {/* Evidence */}
-                      {item.evidence.length > 0 && (
-                        <div className="mt-3 rounded bg-surface-50 p-2">
-                          <p className="text-xs font-medium text-surface-500">
-                            Evidence
-                          </p>
-                          {item.evidence.map((e, i) => (
-                            <p
-                              key={i}
-                              className="mt-1 text-sm italic text-surface-600"
-                            >
-                              &ldquo;{e.quote}&rdquo;
-                              {e.speaker && (
-                                <span className="not-italic">
-                                  {' '}
-                                  - {e.speaker}
-                                </span>
-                              )}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    {hasLock && (
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => startEditing('action_items', item.temp_id)}
-                          className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"
-                          title="Edit description"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => rejectItem('action_items', item.temp_id)}
-                          className="rounded-lg p-2 text-danger-500 hover:bg-danger-50"
-                          title="Reject item"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() =>
-                            toggleAccept('action_items', item.temp_id)
-                          }
-                          className={cn(
-                            'rounded-lg p-2',
-                            item.accepted
-                              ? 'text-success-500 hover:bg-success-50'
-                              : 'text-surface-400 hover:bg-surface-100'
-                          )}
-                          title={item.accepted ? 'Accepted' : 'Not accepted'}
-                        >
-                          {item.accepted ? (
-                            <CheckCircle className="h-5 w-5" />
-                          ) : (
-                            <XCircle className="h-5 w-5" />
-                          )}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                  item={item}
+                  hasLock={hasLock}
+                  ownerOptions={ownerOptions}
+                  onToggleAccept={handleActionItemToggleAccept}
+                  onEdit={handleActionItemEdit}
+                  onReject={handleActionItemReject}
+                  onUpdateOwner={handleActionItemUpdateOwner}
+                  onAcceptAsPlaceholder={handleActionItemPlaceholder}
+                  onOpenAddContactModal={handleActionItemAddContact}
+                />
               ))
             )}
           </div>
@@ -948,12 +802,7 @@ export function ReviewUI({
 
       {/* Decisions Section */}
       <div className="card">
-        <button
-          onClick={() =>
-            setExpandedSections((s) => ({ ...s, decisions: !s.decisions }))
-          }
-          className="flex w-full items-center justify-between"
-        >
+        <button onClick={toggleDecisions} className="flex w-full items-center justify-between">
           <h2 className="text-lg font-semibold text-surface-900">
             Decisions ({proposedItems.decisions.length})
           </h2>
@@ -970,74 +819,14 @@ export function ReviewUI({
               <p className="text-surface-500">No decisions extracted</p>
             ) : (
               proposedItems.decisions.map((item) => (
-                <div
+                <DecisionCard
                   key={item.temp_id}
-                  className={cn(
-                    'rounded-lg border p-4',
-                    item.accepted
-                      ? 'border-surface-200 bg-white'
-                      : 'border-surface-200 bg-surface-50 opacity-60'
-                  )}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        {operationBadge(item.operation)}
-                        <h3 className="font-medium text-surface-900">
-                          {item.title}
-                        </h3>
-                      </div>
-                      <p className="mt-1 text-sm text-surface-600">
-                        <strong>Rationale:</strong> {item.rationale}
-                      </p>
-                      <p className="mt-1 text-sm text-surface-600">
-                        <strong>Outcome:</strong> {item.outcome}
-                      </p>
-                      <div className="mt-2 flex items-center gap-3 text-sm">
-                        <span className="flex items-center gap-1 text-surface-500">
-                          <User className="h-4 w-4" />
-                          Decision maker: {item.decision_maker.name}
-                        </span>
-                      </div>
-                    </div>
-                    {hasLock && (
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => startEditing('decisions', item.temp_id)}
-                          className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"
-                          title="Edit decision"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => rejectItem('decisions', item.temp_id)}
-                          className="rounded-lg p-2 text-danger-500 hover:bg-danger-50"
-                          title="Reject item"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() =>
-                            toggleAccept('decisions', item.temp_id)
-                          }
-                          className={cn(
-                            'rounded-lg p-2',
-                            item.accepted
-                              ? 'text-success-500 hover:bg-success-50'
-                              : 'text-surface-400 hover:bg-surface-100'
-                          )}
-                          title={item.accepted ? 'Accepted' : 'Not accepted'}
-                        >
-                          {item.accepted ? (
-                            <CheckCircle className="h-5 w-5" />
-                          ) : (
-                            <XCircle className="h-5 w-5" />
-                          )}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                  item={item}
+                  hasLock={hasLock}
+                  onToggleAccept={handleDecisionToggleAccept}
+                  onEdit={handleDecisionEdit}
+                  onReject={handleDecisionReject}
+                />
               ))
             )}
           </div>
@@ -1046,12 +835,7 @@ export function ReviewUI({
 
       {/* Risks Section */}
       <div className="card">
-        <button
-          onClick={() =>
-            setExpandedSections((s) => ({ ...s, risks: !s.risks }))
-          }
-          className="flex w-full items-center justify-between"
-        >
+        <button onClick={toggleRisks} className="flex w-full items-center justify-between">
           <h2 className="text-lg font-semibold text-surface-900">
             Risks & Issues ({proposedItems.risks.length})
           </h2>
@@ -1068,150 +852,18 @@ export function ReviewUI({
               <p className="text-surface-500">No risks extracted</p>
             ) : (
               proposedItems.risks.map((item) => (
-                <div
+                <RiskCard
                   key={item.temp_id}
-                  className={cn(
-                    'rounded-lg border p-4',
-                    item.accepted
-                      ? 'border-surface-200 bg-white'
-                      : 'border-surface-200 bg-surface-50 opacity-60'
-                  )}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        {operationBadge(item.operation)}
-                        <h3 className="font-medium text-surface-900">
-                          {item.title}
-                        </h3>
-                        <Badge
-                          variant={
-                            item.probability === 'High' || item.impact === 'High'
-                              ? 'danger'
-                              : item.probability === 'Med' || item.impact === 'Med'
-                                ? 'warning'
-                                : 'default'
-                          }
-                        >
-                          {item.probability}/{item.impact}
-                        </Badge>
-                      </div>
-                      <p className="mt-1 text-sm text-surface-600">
-                        {item.description}
-                      </p>
-                      <p className="mt-1 text-sm text-surface-600">
-                        <strong>Mitigation:</strong> {item.mitigation}
-                      </p>
-                      <div className="mt-2 flex items-center gap-3 text-sm">
-                        <span className="flex items-center gap-1 text-surface-500">
-                          <User className="h-4 w-4" />
-                          {item.owner.name}
-                          {resolutionStatusBadge(item.owner_resolution_status)}
-                        </span>
-                      </div>
-                      {/* Owner resolution controls */}
-                      {hasLock &&
-                        ['unknown', 'ambiguous', 'conference_room', 'needs_confirmation'].includes(
-                          item.owner_resolution_status
-                        ) && (
-                          <div className="mt-3 space-y-2">
-                            {item.owner_resolution_status === 'unknown' && (
-                              <div className="flex flex-wrap gap-2">
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => acceptAsPlaceholder('risks', item.temp_id)}
-                                >
-                                  Accept as Placeholder
-                                </Button>
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => openAddContactModal('risks', item.temp_id, item.owner.name)}
-                                >
-                                  <UserPlus className="h-3 w-3 mr-1" />
-                                  Add as Contact
-                                </Button>
-                                <span className="text-xs text-surface-500 self-center">
-                                  or select existing:
-                                </span>
-                              </div>
-                            )}
-                            {['ambiguous', 'conference_room', 'needs_confirmation'].includes(item.owner_resolution_status) && (
-                              <div className="flex gap-2 mb-2">
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => openAddContactModal('risks', item.temp_id, item.owner.name)}
-                                >
-                                  <UserPlus className="h-3 w-3 mr-1" />
-                                  Add &quot;{item.owner.name}&quot; as Contact
-                                </Button>
-                              </div>
-                            )}
-                            <Select
-                              value={
-                                item.owner.resolved_user_id
-                                  ? `user:${item.owner.resolved_user_id}`
-                                  : item.owner.resolved_contact_id
-                                    ? `contact:${item.owner.resolved_contact_id}`
-                                    : ''
-                              }
-                              onChange={(e) =>
-                                updateOwner('risks', item.temp_id, e.target.value)
-                              }
-                              options={[
-                                ...projectMembers.map((m) => ({
-                                  value: `user:${m.id}`,
-                                  label: m.full_name || m.email,
-                                })),
-                                ...projectContacts.map((c) => ({
-                                  value: `contact:${c.id}`,
-                                  label: `${c.name}${c.email ? ` (${c.email})` : ''} [Contact]`,
-                                })),
-                              ]}
-                              placeholder="Select existing member or contact"
-                              className="w-64"
-                            />
-                          </div>
-                        )}
-                    </div>
-                    {hasLock && (
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => startEditing('risks', item.temp_id)}
-                          className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"
-                          title="Edit risk"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => rejectItem('risks', item.temp_id)}
-                          className="rounded-lg p-2 text-danger-500 hover:bg-danger-50"
-                          title="Reject item"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => toggleAccept('risks', item.temp_id)}
-                          className={cn(
-                            'rounded-lg p-2',
-                            item.accepted
-                              ? 'text-success-500 hover:bg-success-50'
-                              : 'text-surface-400 hover:bg-surface-100'
-                          )}
-                          title={item.accepted ? 'Accepted' : 'Not accepted'}
-                        >
-                          {item.accepted ? (
-                            <CheckCircle className="h-5 w-5" />
-                          ) : (
-                            <XCircle className="h-5 w-5" />
-                          )}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                  item={item}
+                  hasLock={hasLock}
+                  ownerOptions={ownerOptions}
+                  onToggleAccept={handleRiskToggleAccept}
+                  onEdit={handleRiskEdit}
+                  onReject={handleRiskReject}
+                  onUpdateOwner={handleRiskUpdateOwner}
+                  onAcceptAsPlaceholder={handleRiskPlaceholder}
+                  onOpenAddContactModal={handleRiskAddContact}
+                />
               ))
             )}
           </div>
@@ -1219,249 +871,31 @@ export function ReviewUI({
       </div>
 
       {/* Edit Modal */}
-      <Modal
+      <EditItemModal
         isOpen={editModalOpen}
-        onClose={() => {
-          setEditModalOpen(false);
-          setEditingItem(null);
-          setEditFormData({});
-        }}
-        title={`Edit ${editingItem?.type?.replace('_', ' ').toUpperCase()}`}
-      >
-        <div className="space-y-4">
-          {editingItem?.type === 'action_item' && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">
-                  Title
-                </label>
-                <Input
-                  value={editFormData.title || ''}
-                  onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
-                  placeholder="Action item title"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">
-                  Description
-                </label>
-                <Textarea
-                  value={editFormData.description || ''}
-                  onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
-                  placeholder="Action item description"
-                  rows={3}
-                />
-              </div>
-            </>
-          )}
-
-          {editingItem?.type === 'decision' && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">
-                  Title
-                </label>
-                <Input
-                  value={editFormData.title || ''}
-                  onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
-                  placeholder="Decision title"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">
-                  Rationale
-                </label>
-                <Textarea
-                  value={editFormData.rationale || ''}
-                  onChange={(e) => setEditFormData({ ...editFormData, rationale: e.target.value })}
-                  placeholder="Decision rationale"
-                  rows={3}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">
-                  Outcome
-                </label>
-                <Textarea
-                  value={editFormData.outcome || ''}
-                  onChange={(e) => setEditFormData({ ...editFormData, outcome: e.target.value })}
-                  placeholder="Decision outcome"
-                  rows={2}
-                />
-              </div>
-            </>
-          )}
-
-          {editingItem?.type === 'risk' && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">
-                  Title
-                </label>
-                <Input
-                  value={editFormData.title || ''}
-                  onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
-                  placeholder="Risk title"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">
-                  Description
-                </label>
-                <Textarea
-                  value={editFormData.description || ''}
-                  onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
-                  placeholder="Risk description"
-                  rows={3}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">
-                  Mitigation
-                </label>
-                <Textarea
-                  value={editFormData.mitigation || ''}
-                  onChange={(e) => setEditFormData({ ...editFormData, mitigation: e.target.value })}
-                  placeholder="Risk mitigation"
-                  rows={3}
-                />
-              </div>
-            </>
-          )}
-        </div>
-
-        <ModalFooter>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setEditModalOpen(false);
-              setEditingItem(null);
-              setEditFormData({});
-            }}
-          >
-            Cancel
-          </Button>
-          <Button onClick={saveEditedItem}>
-            Save Changes
-          </Button>
-        </ModalFooter>
-      </Modal>
+        editingItem={editingItem}
+        editFormData={editFormData}
+        onClose={closeEditModal}
+        onFormDataChange={setEditFormData}
+        onSave={saveEditedItem}
+      />
 
       {/* New Contact Modal */}
-      <Modal
+      <NewContactModal
         isOpen={newContactModalOpen}
-        onClose={() => {
-          setNewContactModalOpen(false);
-          setNewContactName('');
-          setNewContactEmail('');
-          setNewContactTarget(null);
-          setSimilarNameMatches([]);
-          setShowSimilarNameWarning(false);
-          setForceAddContact(false);
-        }}
-        title={showSimilarNameWarning ? 'Similar Name Found' : 'Add New Contact'}
-      >
-        <div className="space-y-4">
-          {/* Similar name warning */}
-          {showSimilarNameWarning && similarNameMatches.length > 0 && (
-            <div className="rounded-lg border border-warning-200 bg-warning-50 p-4">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="h-5 w-5 text-warning-600 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="font-medium text-warning-700">
-                    Similar name{similarNameMatches.length > 1 ? 's' : ''} already exist{similarNameMatches.length === 1 ? 's' : ''} in this project
-                  </p>
-                  <p className="text-sm text-warning-600 mt-1">
-                    Did you mean one of these people?
-                  </p>
-                  <div className="mt-3 space-y-2">
-                    {similarNameMatches.map((match) => (
-                      <button
-                        key={match.id}
-                        onClick={() => selectExistingMatch(match)}
-                        className="w-full flex items-center gap-3 p-3 rounded-lg border border-warning-200 bg-white hover:bg-warning-100 transition-colors text-left"
-                      >
-                        <User className="h-5 w-5 text-surface-500" />
-                        <div className="flex-1">
-                          <p className="font-medium text-surface-900">{match.name}</p>
-                          <p className="text-sm text-surface-500">
-                            {match.email || 'No email'} • {match.type === 'user' ? 'Team Member' : 'Contact'}
-                          </p>
-                        </div>
-                        <Badge variant="default">{Math.round(match.score * 100)}% match</Badge>
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={confirmAddAsNew}
-                    className="mt-3 text-sm text-warning-700 hover:text-warning-800 underline"
-                  >
-                    No, add &quot;{newContactName}&quot; as a new person
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Normal form (shown when no warning or after confirming add as new) */}
-          {(!showSimilarNameWarning || forceAddContact) && (
-            <>
-              <p className="text-sm text-surface-600">
-                Add this person as a project contact. They will be available for assignment on all items in this project.
-              </p>
-              <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">
-                  Name <span className="text-danger-500">*</span>
-                </label>
-                <Input
-                  value={newContactName}
-                  onChange={(e) => setNewContactName(e.target.value)}
-                  placeholder="Contact name"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">
-                  Email <span className="text-surface-400">(optional)</span>
-                </label>
-                <Input
-                  type="email"
-                  value={newContactEmail}
-                  onChange={(e) => setNewContactEmail(e.target.value)}
-                  placeholder="contact@example.com"
-                />
-              </div>
-            </>
-          )}
-        </div>
-
-        <ModalFooter>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setNewContactModalOpen(false);
-              setNewContactName('');
-              setNewContactEmail('');
-              setNewContactTarget(null);
-              setSimilarNameMatches([]);
-              setShowSimilarNameWarning(false);
-              setForceAddContact(false);
-            }}
-          >
-            Cancel
-          </Button>
-          {(!showSimilarNameWarning || forceAddContact) && (
-            <Button
-              onClick={addNewContact}
-              isLoading={isAddingContact}
-              disabled={!newContactName.trim()}
-            >
-              <UserPlus className="h-4 w-4 mr-1" />
-              Add Contact
-            </Button>
-          )}
-        </ModalFooter>
-      </Modal>
+        contactName={newContactName}
+        contactEmail={newContactEmail}
+        similarNameMatches={similarNameMatches}
+        showSimilarNameWarning={showSimilarNameWarning}
+        forceAddContact={forceAddContact}
+        isAddingContact={isAddingContact}
+        onClose={closeNewContactModal}
+        onNameChange={setNewContactName}
+        onEmailChange={setNewContactEmail}
+        onSelectExistingMatch={selectExistingMatch}
+        onConfirmAddAsNew={confirmAddAsNew}
+        onAddContact={addNewContact}
+      />
     </div>
   );
 }
-
