@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Download, ChevronDown, FileText, File, Loader2 } from 'lucide-react';
 import { downloadMeetingSummary } from '@/lib/export/meeting-summary';
+import { useToast } from '@/components/ui/toast';
 import type { Meeting, MeetingRecap, MeetingTone } from '@/types/database';
 
 interface MeetingSummaryExportProps {
@@ -22,6 +23,7 @@ export function MeetingSummaryExport({
 }: MeetingSummaryExportProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isExporting, setIsExporting] = useState<ExportFormat | null>(null);
+  const { showToast } = useToast();
 
   const handleExport = async (format: ExportFormat) => {
     setIsExporting(format);
@@ -33,8 +35,7 @@ export function MeetingSummaryExport({
         format
       );
     } catch (error) {
-      // Error details logged server-side if applicable
-      alert('Export failed. Please try again.');
+      showToast('Export failed. Please try again.', 'error');
     } finally {
       setIsExporting(null);
     }
@@ -108,6 +109,7 @@ export function MeetingSummaryExport({
     </div>
   );
 }
+
 
 
 

@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Button, Select, Modal, ModalFooter, Input } from '@/components/ui';
 import { Plus, Trash2, Crown, User, UserPlus, Pencil, Users } from 'lucide-react';
 import { cn, getInitials } from '@/lib/utils';
+import { useToast } from '@/components/ui/toast';
 import type { Profile, ProjectContact } from '@/types/database';
 import type { ProjectRole } from '@/types/enums';
 
@@ -42,6 +43,7 @@ export function UnifiedTeamGrid({
 }: UnifiedTeamGridProps) {
   const router = useRouter();
   const supabase = createClient();
+  const { showToast } = useToast();
 
   // Member modal state
   const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
@@ -108,7 +110,7 @@ export function UnifiedTeamGrid({
       router.refresh();
     } catch (error) {
       console.error('Error removing member:', error);
-      alert('Failed to remove member');
+      showToast('Failed to remove member', 'error');
     }
   };
 
@@ -124,7 +126,7 @@ export function UnifiedTeamGrid({
       router.refresh();
     } catch (error) {
       console.error('Error updating role:', error);
-      alert('Failed to update role');
+      showToast('Failed to update role', 'error');
     }
   };
 
@@ -217,7 +219,7 @@ export function UnifiedTeamGrid({
       router.refresh();
     } catch (error) {
       console.error('Error removing contact:', error);
-      alert('Failed to remove contact');
+      showToast('Failed to remove contact', 'error');
     }
   };
 

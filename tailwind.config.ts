@@ -84,6 +84,8 @@ const config: Config = {
         'scale-in': 'scaleIn 0.2s ease-out',
         'card-hover': 'cardHover 0.3s ease-out forwards',
         'drag-start': 'dragStart 0.15s ease-out forwards',
+        // Toast animations
+        'slide-in-right': 'slideInRight 0.3s ease-out',
       },
       keyframes: {
         fadeIn: {
@@ -121,6 +123,10 @@ const config: Config = {
         dragStart: {
           '0%': { transform: 'scale(1)', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)' },
           '100%': { transform: 'scale(1.02)', boxShadow: '0 20px 50px rgba(0, 0, 0, 0.15)' },
+        },
+        slideInRight: {
+          '0%': { transform: 'translateX(100%)', opacity: '0' },
+          '100%': { transform: 'translateX(0)', opacity: '1' },
         },
       },
     },

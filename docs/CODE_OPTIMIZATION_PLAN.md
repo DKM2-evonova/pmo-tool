@@ -7,6 +7,7 @@ This document tracks the comprehensive code review and optimization effort for t
 **Last Updated:** December 21, 2025
 **Phase 2 Completed:** December 21, 2025 (all items)
 **Phase 3 Completed:** December 21, 2025 (all high-impact items)
+**Phase 4 Started:** December 21, 2025 (toast notifications complete)
 
 ---
 
@@ -169,11 +170,11 @@ Pre-compiled regex at module load for better performance.
 
 ---
 
-## Phase 4: Low Priority - PENDING
+## Phase 4: Low Priority - IN PROGRESS
 
-- [ ] Replace remaining `alert()` calls with toast notifications (28 occurrences)
+- [x] Replace remaining `alert()` calls with toast notifications (29 occurrences)
+- [x] Remove unused exports (analyzed, minimal unused exports found)
 - [ ] Add soft delete support across all entities
-- [ ] Remove unused exports
 - [ ] Add comprehensive documentation
 - [ ] Consolidate duplicate utility functions
 - [ ] Improve accessibility across all components
@@ -461,3 +462,51 @@ Fixed inconsistency between `action_items.updates` (TEXT) and `risks.updates` (J
 ### 9. Remaining Items Deferred to Phase 4
 - **Replace alert() calls:** 28 occurrences across 14 files - requires toast notification system
 - **Soft delete support:** Significant schema change requiring careful planning
+
+---
+
+## Phase 4 Implementation Details
+
+### 1. Toast Notification System
+Created a global toast notification system to replace all `alert()` calls:
+
+**New files created:**
+- `src/components/ui/toast.tsx` - Toast context, provider, and components
+
+**Implementation:**
+- `ToastProvider` wraps the app in root layout
+- `useToast()` hook provides `showToast(message, type, duration)` function
+- Toast types: `success`, `error`, `warning`, `info`
+- Auto-dismiss after 5 seconds (configurable)
+- Accessible with ARIA attributes and keyboard support
+- Smooth slide-in animation from right side
+
+**Files modified (29 alert calls replaced):**
+- `src/app/layout.tsx` - Added ToastProvider wrapper
+- `src/components/admin/meeting-management.tsx` - 3 alerts
+- `src/components/admin/team-overview.tsx` - 2 alerts
+- `src/components/projects/member-management.tsx` - 3 alerts
+- `src/components/projects/unified-team-grid.tsx` - 3 alerts
+- `src/components/meetings/meeting-ingestion.tsx` - 1 alert
+- `src/components/meetings/meeting-details.tsx` - 2 alerts
+- `src/components/meetings/review-ui.tsx` - 6 alerts
+- `src/components/action-items/action-item-form.tsx` - 1 alert
+- `src/components/export/export-button.tsx` - 1 alert
+- `src/components/export/meeting-summary-export.tsx` - 1 alert
+- `src/components/reports/status-report-export.tsx` - 1 alert
+- `src/app/(dashboard)/risks/[id]/risk-detail.tsx` - 2 alerts
+- `src/app/(dashboard)/action-items/[id]/action-item-detail.tsx` - 3 alerts
+
+**CSS/Animation updates:**
+- `tailwind.config.ts` - Added `slideInRight` animation keyframes
+
+### 2. Unused Exports Analysis
+Analyzed codebase for unused exports. Findings:
+
+**Minimal unused exports found (intentionally kept):**
+- `cosineSimilarity` in `src/lib/embeddings/client.ts` - utility function, may be useful for future API
+- `isOwnerResolutionBlocking` in `src/lib/llm/owner-resolution.ts` - utility function
+- `getResolutionStatusLabel` in `src/lib/llm/owner-resolution.ts` - utility function
+- Several type exports in `src/lib/google/types.ts` - may be useful for external consumers
+
+These exports are minimal overhead and may be intentional for API design. No removal necessary.

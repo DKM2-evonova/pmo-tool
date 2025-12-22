@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Button, Badge, Input, Select } from '@/components/ui';
 import { formatDateReadable, getInitials, calculateRiskSeverity, cn } from '@/lib/utils';
+import { useToast } from '@/components/ui/toast';
 import {
   ArrowLeft,
   Edit3,
@@ -51,6 +52,7 @@ interface RiskDetailProps {
 export function RiskDetail({ risk: initialRisk, projectMembers, currentUserId }: RiskDetailProps) {
   const router = useRouter();
   const supabase = createClient();
+  const { showToast } = useToast();
   const [risk, setRisk] = useState(initialRisk);
   const [editing, setEditing] = useState(false);
   const [newUpdate, setNewUpdate] = useState('');
@@ -112,7 +114,7 @@ export function RiskDetail({ risk: initialRisk, projectMembers, currentUserId }:
       router.refresh();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      alert(`Failed to update risk: ${errorMessage}`);
+      showToast(`Failed to update risk: ${errorMessage}`, 'error');
     } finally {
       setSaving(false);
     }
@@ -145,9 +147,10 @@ export function RiskDetail({ risk: initialRisk, projectMembers, currentUserId }:
       setRisk({ ...risk, updates: updatedUpdates });
       setNewUpdate('');
       router.refresh();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to add update:', error);
-      alert(`Failed to add status update: ${error?.message || 'Unknown error'}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showToast(`Failed to add status update: ${errorMessage}`, 'error');
     } finally {
       setSaving(false);
     }

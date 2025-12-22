@@ -8,6 +8,7 @@ import { TranscriptUpload, UploadedFileInfo } from './transcript-upload';
 import { AttendeeInput } from './attendee-input';
 import { CategorySelector } from './category-selector';
 import { CalendarEventPicker } from '@/components/google';
+import { useToast } from '@/components/ui/toast';
 import {
   Upload,
   Chrome,
@@ -34,6 +35,7 @@ export function MeetingIngestion({
 }: MeetingIngestionProps) {
   const router = useRouter();
   const supabase = createClient();
+  const { showToast } = useToast();
 
   const [step, setStep] = useState<Step>('project');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -173,7 +175,7 @@ export function MeetingIngestion({
       router.push(`/meetings/${meeting.id}/process`);
     } catch (error) {
       console.error('Error creating meeting:', error);
-      alert('Failed to create meeting. Please try again.');
+      showToast('Failed to create meeting. Please try again.', 'error');
     } finally {
       setIsSubmitting(false);
     }

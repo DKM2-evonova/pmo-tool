@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Button, Badge, Input, Select } from '@/components/ui';
 import { formatDateReadable, isOverdue, getInitials, cn } from '@/lib/utils';
+import { useToast } from '@/components/ui/toast';
 import {
   ArrowLeft,
   Edit3,
@@ -51,6 +52,7 @@ interface ActionItemDetailProps {
 export function ActionItemDetail({ actionItem: initialActionItem, projectMembers, currentUserId }: ActionItemDetailProps) {
   const router = useRouter();
   const supabase = createClient();
+  const { showToast } = useToast();
   const [actionItem, setActionItem] = useState(initialActionItem);
   const [editing, setEditing] = useState(false);
   const [newUpdate, setNewUpdate] = useState('');
@@ -108,7 +110,7 @@ export function ActionItemDetail({ actionItem: initialActionItem, projectMembers
       router.refresh();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      alert(`Failed to update action item: ${errorMessage}`);
+      showToast(`Failed to update action item: ${errorMessage}`, 'error');
     } finally {
       setSaving(false);
     }
@@ -141,9 +143,10 @@ export function ActionItemDetail({ actionItem: initialActionItem, projectMembers
       setActionItem({ ...actionItem, updates: updatedUpdates });
       setNewUpdate('');
       router.refresh();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to add update:', error);
-      alert(`Failed to add status update: ${error?.message || 'Unknown error'}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showToast(`Failed to add status update: ${errorMessage}`, 'error');
     } finally {
       setSaving(false);
     }
@@ -197,9 +200,10 @@ export function ActionItemDetail({ actionItem: initialActionItem, projectMembers
       await handleAddUpdateForOwnerChange(changeMessage);
 
       router.refresh();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to assign owner:', error);
-      alert(`Failed to assign owner: ${error?.message || 'Unknown error'}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showToast(`Failed to assign owner: ${errorMessage}`, 'error');
     } finally {
       setSaving(false);
     }

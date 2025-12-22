@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Button, Select, Modal, ModalFooter } from '@/components/ui';
 import { Plus, Trash2, Crown, User } from 'lucide-react';
 import { cn, getInitials } from '@/lib/utils';
+import { useToast } from '@/components/ui/toast';
 import type { Profile } from '@/types/database';
 import type { ProjectRole } from '@/types/enums';
 
@@ -40,6 +41,7 @@ export function MemberManagement({
 }: MemberManagementProps) {
   const router = useRouter();
   const supabase = createClient();
+  const { showToast } = useToast();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedRole, setSelectedRole] = useState<ProjectRole>('member');
@@ -73,7 +75,7 @@ export function MemberManagement({
       router.refresh();
     } catch (error) {
       console.error('Error adding member:', error);
-      alert('Failed to add member');
+      showToast('Failed to add member', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -93,7 +95,7 @@ export function MemberManagement({
       router.refresh();
     } catch (error) {
       console.error('Error removing member:', error);
-      alert('Failed to remove member');
+      showToast('Failed to remove member', 'error');
     }
   };
 
@@ -109,7 +111,7 @@ export function MemberManagement({
       router.refresh();
     } catch (error) {
       console.error('Error updating role:', error);
-      alert('Failed to update role');
+      showToast('Failed to update role', 'error');
     }
   };
 

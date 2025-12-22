@@ -4,6 +4,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui';
+import { useToast } from '@/components/ui/toast';
 import { AlertTriangle, ChevronDown, ChevronUp, UserPlus } from 'lucide-react';
 import { findSimilarNames, buildPeopleRoster, type PersonMatch } from '@/lib/utils/name-matching';
 import {
@@ -51,6 +52,7 @@ export function ReviewUI({
 }: ReviewUIProps) {
   const router = useRouter();
   const supabase = createClient();
+  const { showToast } = useToast();
 
   // Track project contacts locally so we can add new ones without page refresh
   const [projectContacts, setProjectContacts] = useState<ProjectContact[]>(initialProjectContacts);
@@ -107,13 +109,13 @@ export function ReviewUI({
         setIsLocked(false);
         router.refresh();
       } else {
-        alert('Failed to acquire lock. Someone else may be reviewing.');
+        showToast('Failed to acquire lock. Someone else may be reviewing.', 'warning');
         router.refresh();
       }
     } catch (error) {
       console.error('Failed to acquire lock:', error);
     }
-  }, [supabase, proposedChangeSet.id, proposedChangeSet.lock_version, currentUserId, router]);
+  }, [supabase, proposedChangeSet.id, proposedChangeSet.lock_version, currentUserId, router, showToast]);
 
   // Release lock
   const releaseLock = useCallback(async () => {
@@ -387,7 +389,7 @@ export function ReviewUI({
       closeNewContactModal();
     } catch (error) {
       console.error('Failed to add contact:', error);
-      alert('Failed to add contact: ' + (error as Error).message);
+      showToast('Failed to add contact: ' + (error as Error).message, 'error');
     } finally {
       setIsAddingContact(false);
     }
@@ -401,6 +403,7 @@ export function ReviewUI({
     getItemOwnerName,
     applyOwnerToAllMatching,
     closeNewContactModal,
+    showToast,
   ]);
 
   // Get all unique unresolved owner names from action items and risks
@@ -489,11 +492,11 @@ export function ReviewUI({
       }
     } catch (error) {
       console.error('Failed to add contacts:', error);
-      alert('Failed to add some contacts: ' + (error as Error).message);
+      showToast('Failed to add some contacts: ' + (error as Error).message, 'error');
     } finally {
       setIsAddingAllContacts(false);
     }
-  }, [unresolvedOwnerNames, projectId]);
+  }, [unresolvedOwnerNames, projectId, showToast]);
 
   // Start editing an item
   const startEditing = useCallback(
@@ -566,9 +569,9 @@ export function ReviewUI({
       if (error) throw error;
     } catch (error) {
       console.error('Failed to save changes:', error);
-      alert('Failed to save changes');
+      showToast('Failed to save changes', 'error');
     }
-  }, [supabase, proposedItems, proposedChangeSet.id]);
+  }, [supabase, proposedItems, proposedChangeSet.id, showToast]);
 
   // Check if can publish (only truly blocking issues)
   const canPublish = useMemo(() => {
@@ -585,7 +588,7 @@ export function ReviewUI({
   // Publish changes
   const handlePublish = useCallback(async () => {
     if (!canPublish) {
-      alert('Please resolve all owners before publishing');
+      showToast('Please resolve all owners before publishing', 'warning');
       return;
     }
 
@@ -607,11 +610,11 @@ export function ReviewUI({
       router.refresh();
     } catch (error) {
       console.error('Publish failed:', error);
-      alert('Failed to publish: ' + (error as Error).message);
+      showToast('Failed to publish: ' + (error as Error).message, 'error');
     } finally {
       setIsPublishing(false);
     }
-  }, [canPublish, saveChanges, meetingId, router]);
+  }, [canPublish, saveChanges, meetingId, router, showToast]);
 
   // Section toggle handlers
   const toggleActionItems = useCallback(() => {

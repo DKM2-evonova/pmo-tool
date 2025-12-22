@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui';
 import { Search, ChevronDown, ChevronUp, Users, User, Settings, Trash2 } from 'lucide-react';
 import { cn, getInitials } from '@/lib/utils';
+import { useToast } from '@/components/ui/toast';
 import type { Profile, ProjectContact } from '@/types/database';
 
 interface ProjectWithTeam {
@@ -30,6 +31,7 @@ interface TeamOverviewProps {
 
 export function TeamOverview({ projects }: TeamOverviewProps) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
@@ -65,21 +67,15 @@ export function TeamOverview({ projects }: TeamOverviewProps) {
         throw new Error(responseData.error || 'Failed to delete project');
       }
 
-      alert(
-        `Project "${responseData.deleted.project}" deleted successfully.\n\n` +
-        `Removed:\n` +
-        `- ${responseData.deleted.meetings} meeting${responseData.deleted.meetings !== 1 ? 's' : ''}\n` +
-        `- ${responseData.deleted.action_items} action item${responseData.deleted.action_items !== 1 ? 's' : ''}\n` +
-        `- ${responseData.deleted.decisions} decision${responseData.deleted.decisions !== 1 ? 's' : ''}\n` +
-        `- ${responseData.deleted.risks} risk${responseData.deleted.risks !== 1 ? 's' : ''}\n` +
-        `- ${responseData.deleted.members} member${responseData.deleted.members !== 1 ? 's' : ''}\n` +
-        `- ${responseData.deleted.contacts} contact${responseData.deleted.contacts !== 1 ? 's' : ''}`
+      showToast(
+        `Project "${responseData.deleted.project}" deleted successfully. Removed ${responseData.deleted.meetings} meetings, ${responseData.deleted.action_items} action items, ${responseData.deleted.decisions} decisions, ${responseData.deleted.risks} risks.`,
+        'success'
       );
 
       router.refresh();
     } catch (error) {
       console.error('Error deleting project:', error);
-      alert('Failed to delete project: ' + (error as Error).message);
+      showToast('Failed to delete project: ' + (error as Error).message, 'error');
     } finally {
       setDeletingProjectId(null);
     }

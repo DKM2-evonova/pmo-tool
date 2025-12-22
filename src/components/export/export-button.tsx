@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Download, ChevronDown, FileText, Table, File } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/components/ui/toast';
 import {
   downloadCSV,
   exportActionItemsToCSV,
@@ -26,6 +27,7 @@ interface ExportButtonProps {
 export function ExportButton({ type, data, projectName }: ExportButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const { showToast } = useToast();
 
   const handleExport = async (format: 'csv') => {
     setIsExporting(true);
@@ -51,7 +53,7 @@ export function ExportButton({ type, data, projectName }: ExportButtonProps) {
       }
     } catch (error) {
       console.error('Export failed:', error);
-      alert('Export failed. Please try again.');
+      showToast('Export failed. Please try again.', 'error');
     } finally {
       setIsExporting(false);
     }

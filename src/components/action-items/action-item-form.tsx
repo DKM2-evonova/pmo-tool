@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button, Input, Select } from '@/components/ui';
+import { useToast } from '@/components/ui/toast';
 import type { Profile } from '@/types/database';
 import type { EntityStatus } from '@/types/enums';
 
@@ -18,6 +19,7 @@ export function ActionItemForm({
 }: ActionItemFormProps) {
   const router = useRouter();
   const supabase = createClient();
+  const { showToast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [projectMembers, setProjectMembers] = useState<Profile[]>([]);
 
@@ -88,7 +90,7 @@ export function ActionItemForm({
       router.refresh();
     } catch (error) {
       console.error('Error creating action item:', error);
-      alert('Failed to create action item');
+      showToast('Failed to create action item', 'error');
     } finally {
       setIsSubmitting(false);
     }

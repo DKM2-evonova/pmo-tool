@@ -6,6 +6,7 @@ import { ArrowLeft, Calendar, Users, Tag, FileText, Download, Loader2 } from 'lu
 import { Badge } from '@/components/ui';
 import { formatDateReadable } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
+import { useToast } from '@/components/ui/toast';
 import type { Meeting } from '@/types/database';
 
 interface MeetingDetailsProps {
@@ -15,6 +16,7 @@ interface MeetingDetailsProps {
 export function MeetingDetails({ meeting }: MeetingDetailsProps) {
   const [isDownloading, setIsDownloading] = useState(false);
   const supabase = createClient();
+  const { showToast } = useToast();
 
   const statusVariant: Record<string, 'default' | 'success' | 'warning' | 'danger'> = {
     Draft: 'default',
@@ -35,7 +37,7 @@ export function MeetingDetails({ meeting }: MeetingDetailsProps) {
 
       if (error) {
         console.error('Error downloading file:', error);
-        alert('Failed to download file. Please try again.');
+        showToast('Failed to download file. Please try again.', 'error');
         return;
       }
 
@@ -50,7 +52,7 @@ export function MeetingDetails({ meeting }: MeetingDetailsProps) {
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error downloading file:', error);
-      alert('Failed to download file. Please try again.');
+      showToast('Failed to download file. Please try again.', 'error');
     } finally {
       setIsDownloading(false);
     }

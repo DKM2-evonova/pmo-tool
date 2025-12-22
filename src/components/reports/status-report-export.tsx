@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Download, ChevronDown, FileSpreadsheet, FileText, Loader2 } from 'lucide-react';
 import { generateProjectStatusPDF } from '@/lib/export/project-status-report';
 import { generateProjectStatusExcel } from '@/lib/export/project-status-excel';
+import { useToast } from '@/components/ui/toast';
 import type { ActionItemWithOwner, RiskWithOwner, DecisionWithMaker } from '@/types/database';
 
 interface StatusReportExportProps {
@@ -23,6 +24,7 @@ export function StatusReportExport({
 }: StatusReportExportProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isExporting, setIsExporting] = useState<'pdf' | 'excel' | null>(null);
+  const { showToast } = useToast();
 
   const handleExport = async (format: 'pdf' | 'excel') => {
     setIsExporting(format);
@@ -63,7 +65,7 @@ export function StatusReportExport({
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Export failed:', error);
-      alert('Export failed. Please try again.');
+      showToast('Export failed. Please try again.', 'error');
     } finally {
       setIsExporting(null);
     }

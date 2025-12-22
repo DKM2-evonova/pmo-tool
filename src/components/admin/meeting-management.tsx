@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import { Search, MoreVertical, Trash2, Calendar, FileText, AlertTriangle } from 'lucide-react';
 import { cn, formatDateReadable } from '@/lib/utils';
+import { useToast } from '@/components/ui/toast';
 import type { Meeting } from '@/types/database';
 import type { MeetingCategory, MeetingStatus } from '@/types/enums';
 
@@ -22,6 +23,7 @@ interface MeetingManagementProps {
 export function MeetingManagement({ meetings }: MeetingManagementProps) {
   const router = useRouter();
   const supabase = createClient();
+  const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMeeting, setSelectedMeeting] = useState<MeetingWithProject | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -53,7 +55,7 @@ export function MeetingManagement({ meetings }: MeetingManagementProps) {
   const handleDeleteMeeting = async (meetingId: string) => {
     const meeting = meetings.find(m => m.id === meetingId);
     if (meeting?.status === 'Deleted') {
-      alert('This meeting is already deleted.');
+      showToast('This meeting is already deleted.', 'warning');
       return;
     }
 
@@ -73,14 +75,14 @@ export function MeetingManagement({ meetings }: MeetingManagementProps) {
         throw new Error(responseData.error || 'Failed to delete meeting');
       }
 
-      alert(`Meeting deleted successfully. Removed ${responseData.deleted.action_items} action items, ${responseData.deleted.decisions} decisions, and ${responseData.deleted.risks} risks.`);
+      showToast(`Meeting deleted successfully. Removed ${responseData.deleted.action_items} action items, ${responseData.deleted.decisions} decisions, and ${responseData.deleted.risks} risks.`, 'success');
 
       // Force a hard refresh to ensure the status update is visible
       router.refresh();
       setSelectedMeeting(null);
     } catch (error) {
       console.error('Error deleting meeting:', error);
-      alert('Failed to delete meeting: ' + (error as Error).message);
+      showToast('Failed to delete meeting: ' + (error as Error).message, 'error');
     } finally {
       setIsDeleting(false);
     }
