@@ -7,8 +7,9 @@ import { ReportTabs } from '@/components/reports/report-tabs';
 import { ActionItemsLog } from '@/components/reports/action-items-log';
 import { RisksLog } from '@/components/reports/risks-log';
 import { DecisionsLog } from '@/components/reports/decisions-log';
+import { MilestonesLog } from '@/components/reports/milestones-log';
 import { StatusReportExport } from '@/components/reports/status-report-export';
-import type { ActionItemWithOwner, RiskWithOwner, DecisionWithMaker } from '@/types/database';
+import type { ActionItemWithOwner, RiskWithOwner, DecisionWithMaker, Milestone } from '@/types/database';
 
 interface Project {
   id: string;
@@ -24,9 +25,10 @@ interface ReportData {
   actionItems: ActionItemWithOwner[];
   risks: RiskWithOwner[];
   decisions: DecisionWithMaker[];
+  milestones: Milestone[];
 }
 
-type TabType = 'action-items' | 'risks' | 'decisions';
+type TabType = 'action-items' | 'risks' | 'decisions' | 'milestones';
 
 export function ProjectStatusClient({ projects }: ProjectStatusClientProps) {
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
@@ -71,6 +73,7 @@ export function ProjectStatusClient({ projects }: ProjectStatusClientProps) {
     'action-items': reportData?.actionItems.length || 0,
     'risks': reportData?.risks.length || 0,
     'decisions': reportData?.decisions.length || 0,
+    'milestones': reportData?.milestones.length || 0,
   };
 
   return (
@@ -97,6 +100,7 @@ export function ProjectStatusClient({ projects }: ProjectStatusClientProps) {
             actionItems={reportData.actionItems}
             risks={reportData.risks}
             decisions={reportData.decisions}
+            milestones={reportData.milestones}
             disabled={isLoading}
           />
         )}
@@ -152,6 +156,9 @@ export function ProjectStatusClient({ projects }: ProjectStatusClientProps) {
             )}
             {activeTab === 'decisions' && (
               <DecisionsLog items={reportData.decisions} />
+            )}
+            {activeTab === 'milestones' && (
+              <MilestonesLog items={reportData.milestones} />
             )}
           </div>
         </div>

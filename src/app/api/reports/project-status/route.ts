@@ -45,10 +45,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden - no access to this project' }, { status: 403 });
     }
 
-    // Fetch project info
+    // Fetch project info including milestones
     const { data: project, error: projectError } = await supabase
       .from('projects')
-      .select('id, name')
+      .select('id, name, milestones')
       .eq('id', projectId)
       .single();
 
@@ -141,18 +141,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch decisions' }, { status: 500 });
     }
 
+    // Parse milestones (stored as JSON in database)
+    const milestones = Array.isArray(project.milestones) ? project.milestones : [];
+
     log.info('Project status report data fetched', {
       projectId,
       actionItemsCount: actionItemsResult.data?.length || 0,
       risksCount: risksResult.data?.length || 0,
       decisionsCount: decisionsResult.data?.length || 0,
+      milestonesCount: milestones.length,
     });
 
     return NextResponse.json({
-      project,
+      project: { id: project.id, name: project.name },
       actionItems: actionItemsResult.data || [],
       risks: risksResult.data || [],
       decisions: decisionsResult.data || [],
+      milestones,
     });
   } catch (error) {
     log.error('Unexpected error in project status report', { error: error instanceof Error ? error.message : 'Unknown error' });

@@ -1,15 +1,16 @@
 /**
  * Project Status Report Excel Export
- * Generates a professional Excel workbook with 3 sheets:
+ * Generates a professional Excel workbook with 4 sheets:
  * 1. Action Items
  * 2. Risks/Issues
  * 3. Key Decisions
+ * 4. Milestones
  *
  * Compatible with Microsoft Excel and Google Sheets
  */
 
 import ExcelJS from 'exceljs';
-import type { ActionItemWithOwner, RiskWithOwner, DecisionWithMaker } from '@/types/database';
+import type { ActionItemWithOwner, RiskWithOwner, DecisionWithMaker, Milestone } from '@/types/database';
 
 export interface ProjectStatusExportData {
   projectName: string;
@@ -17,6 +18,7 @@ export interface ProjectStatusExportData {
   actionItems: ActionItemWithOwner[];
   risks: RiskWithOwner[];
   decisions: DecisionWithMaker[];
+  milestones: Milestone[];
 }
 
 // Color palette (ARGB format for ExcelJS)
@@ -585,6 +587,106 @@ export async function generateProjectStatusExcel(
   }
 
   applyPrintSettings(decisionSheet, 'Key Decisions Log');
+
+  // =====================
+  // SHEET 4: MILESTONES
+  // =====================
+  const milestoneSheet = workbook.addWorksheet('Milestones', {
+    views: [{ state: 'frozen', xSplit: 0, ySplit: HEADER_ROW }],
+  });
+
+  const milestoneColumnWidths = [45, 18, 18];
+  milestoneSheet.columns = [
+    { key: 'name', width: milestoneColumnWidths[0] },
+    { key: 'status', width: milestoneColumnWidths[1] },
+    { key: 'target_date', width: milestoneColumnWidths[2] },
+  ];
+
+  // Sort milestones by target_date (ascending), nulls last
+  const sortedMilestones = [...(data.milestones || [])].sort((a, b) => {
+    if (!a.target_date && !b.target_date) return 0;
+    if (!a.target_date) return 1;
+    if (!b.target_date) return -1;
+    return new Date(a.target_date).getTime() - new Date(b.target_date).getTime();
+  });
+
+  addReportHeader(milestoneSheet, 'Milestones', data.projectName, data.generatedAt, sortedMilestones.length, 3);
+
+  const milestoneHeaders = ['Milestone', 'Status', 'Target Date'];
+  const milestoneHeaderRow = milestoneSheet.getRow(HEADER_ROW);
+  milestoneHeaders.forEach((header, index) => {
+    milestoneHeaderRow.getCell(index + 1).value = header;
+  });
+  styleColumnHeaders(milestoneSheet, HEADER_ROW, 3);
+
+  let milestoneRowNum = DATA_START_ROW;
+  sortedMilestones.forEach((item, index) => {
+    const row = milestoneSheet.getRow(milestoneRowNum);
+
+    row.getCell(1).value = item.name;
+    row.getCell(2).value = item.status;
+    row.getCell(3).value = item.target_date ? new Date(item.target_date) : null;
+
+    const rowHeight = calculateRowHeight([item.name], milestoneColumnWidths);
+    row.height = rowHeight;
+
+    // Style row (columns 2, 3 are centered - status, target date)
+    styleDataRow(row, index, 3, [2, 3]);
+
+    // Style status cell based on status
+    const statusCell = row.getCell(2);
+    if (item.status === 'Complete') {
+      statusCell.font = { color: { argb: COLORS.success }, bold: true, size: 10 };
+      statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.successLight } };
+      // Strike through milestone name for completed items
+      row.getCell(1).font = { color: { argb: COLORS.surface500 }, strike: true };
+    } else if (item.status === 'In Progress') {
+      statusCell.font = { color: { argb: COLORS.primary }, bold: true, size: 10 };
+      statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.primaryLight } };
+    } else if (item.status === 'Behind Schedule') {
+      statusCell.font = { color: { argb: COLORS.warning }, bold: true, size: 10 };
+      statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.warningLight } };
+    } else {
+      // Not Started
+      statusCell.font = { color: { argb: COLORS.surface600 }, bold: true, size: 10 };
+      statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.surface100 } };
+    }
+
+    // Highlight overdue dates (if not complete and target date is past)
+    if (item.target_date && item.status !== 'Complete') {
+      const targetDate = new Date(item.target_date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      targetDate.setHours(0, 0, 0, 0);
+      if (targetDate < today) {
+        const targetDateCell = row.getCell(3);
+        targetDateCell.font = { color: { argb: COLORS.danger }, bold: true, size: 10 };
+        targetDateCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.dangerLight } };
+      }
+    }
+
+    milestoneRowNum++;
+  });
+
+  milestoneSheet.getColumn(3).numFmt = 'mmm d, yyyy';
+
+  // Summary by status
+  const milestoneCompleteCount = sortedMilestones.filter(m => m.status === 'Complete').length;
+  const milestoneInProgressCount = sortedMilestones.filter(m => m.status === 'In Progress').length;
+  const milestoneBehindScheduleCount = sortedMilestones.filter(m => m.status === 'Behind Schedule').length;
+  const milestoneNotStartedCount = sortedMilestones.filter(m => m.status === 'Not Started').length;
+
+  addSummaryFooter(milestoneSheet, sortedMilestones.length, 3,
+    `Complete: ${milestoneCompleteCount} | In Progress: ${milestoneInProgressCount} | Behind Schedule: ${milestoneBehindScheduleCount} | Not Started: ${milestoneNotStartedCount}`);
+
+  if (sortedMilestones.length > 0) {
+    milestoneSheet.autoFilter = {
+      from: { row: HEADER_ROW, column: 1 },
+      to: { row: HEADER_ROW + sortedMilestones.length, column: 3 },
+    };
+  }
+
+  applyPrintSettings(milestoneSheet, 'Milestones');
 
   // Generate buffer and convert to Blob
   const buffer = await workbook.xlsx.writeBuffer();

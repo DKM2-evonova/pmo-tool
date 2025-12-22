@@ -4,6 +4,18 @@ All notable changes to the PMO Tool are documented here.
 
 ---
 
+## [1.1.1] - December 21, 2025
+
+### Added
+- **Milestones tab in Project Status Report dashboard**: View all project milestones with status and target dates
+- **Milestones worksheet in Excel export**: 4th worksheet with same professional styling as other sheets
+  - Color-coded status badges (Not Started, In Progress, Behind Schedule, Complete)
+  - Strikethrough for completed milestones
+  - Overdue date highlighting
+  - Summary footer with status counts
+
+---
+
 ## [1.1.0] - December 21, 2025
 
 ### Added
@@ -83,6 +95,7 @@ All notable changes to the PMO Tool are documented here.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 1.1.1 | Dec 21, 2025 | Milestones in status reports (dashboard + Excel) |
 | 1.1.0 | Dec 21, 2025 | Code optimization complete, toast system |
 | 1.0.0 | Dec 15, 2025 | Liquid Glass UI, Google Calendar, security hardening |
 | 0.9.0 | Dec 13, 2025 | MVP approval, core features complete |

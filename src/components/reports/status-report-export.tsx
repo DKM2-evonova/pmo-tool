@@ -5,13 +5,14 @@ import { Download, ChevronDown, FileSpreadsheet, FileText, Loader2 } from 'lucid
 import { generateProjectStatusPDF } from '@/lib/export/project-status-report';
 import { generateProjectStatusExcel } from '@/lib/export/project-status-excel';
 import { useToast } from '@/components/ui/toast';
-import type { ActionItemWithOwner, RiskWithOwner, DecisionWithMaker } from '@/types/database';
+import type { ActionItemWithOwner, RiskWithOwner, DecisionWithMaker, Milestone } from '@/types/database';
 
 interface StatusReportExportProps {
   projectName: string;
   actionItems: ActionItemWithOwner[];
   risks: RiskWithOwner[];
   decisions: DecisionWithMaker[];
+  milestones: Milestone[];
   disabled?: boolean;
 }
 
@@ -20,6 +21,7 @@ export function StatusReportExport({
   actionItems,
   risks,
   decisions,
+  milestones,
   disabled,
 }: StatusReportExportProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -41,6 +43,7 @@ export function StatusReportExport({
         actionItems,
         risks,
         decisions,
+        milestones,
       };
 
       let blob: Blob;
@@ -116,7 +119,7 @@ export function StatusReportExport({
               <FileSpreadsheet className="h-4 w-4 text-success-500" />
               <div className="text-left">
                 <p className="font-medium">Export as Excel</p>
-                <p className="text-xs text-surface-500">3 worksheets</p>
+                <p className="text-xs text-surface-500">4 worksheets</p>
               </div>
             </button>
           </div>

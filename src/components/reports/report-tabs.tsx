@@ -1,9 +1,9 @@
 'use client';
 
-import { CheckSquare, AlertTriangle, FileText } from 'lucide-react';
+import { CheckSquare, AlertTriangle, FileText, Flag } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-type TabType = 'action-items' | 'risks' | 'decisions';
+type TabType = 'action-items' | 'risks' | 'decisions' | 'milestones';
 
 interface ReportTabsProps {
   activeTab: TabType;
@@ -12,6 +12,7 @@ interface ReportTabsProps {
     'action-items': number;
     'risks': number;
     'decisions': number;
+    'milestones': number;
   };
 }
 
@@ -34,6 +35,12 @@ export function ReportTabs({ activeTab, onTabChange, counts }: ReportTabsProps) 
       label: 'Key Decisions',
       icon: FileText,
       count: counts['decisions'],
+    },
+    {
+      id: 'milestones' as TabType,
+      label: 'Milestones',
+      icon: Flag,
+      count: counts['milestones'],
     },
   ];
 
