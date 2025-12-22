@@ -4,7 +4,6 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { generateEmbedding } from './client';
-import type { EntityType } from '@/types/enums';
 import { loggers } from '@/lib/logger';
 
 const log = loggers.embedding;
@@ -32,23 +31,38 @@ export interface DuplicateCheckResult {
 }
 
 /**
- * Check for duplicates of an action item
+ * Entity type for duplicate checking
  */
-export async function checkActionItemDuplicate(
+type DuplicateEntityType = 'action_item' | 'decision' | 'risk';
+
+/**
+ * RPC function names for each entity type
+ */
+const RPC_FUNCTIONS: Record<DuplicateEntityType, string> = {
+  action_item: 'match_action_items',
+  decision: 'match_decisions',
+  risk: 'match_risks',
+};
+
+/**
+ * Generic duplicate check function for any entity type
+ */
+async function checkDuplicate(
+  entityType: DuplicateEntityType,
   title: string,
-  description: string,
+  content: string,
   projectId: string,
   threshold: number = DEFAULT_THRESHOLD
 ): Promise<DuplicateCheckResult> {
   const startTime = Date.now();
-  log.debug('Checking action item for duplicates', { title, projectId, threshold });
-  
+  log.debug(`Checking ${entityType} for duplicates`, { title, projectId, threshold });
+
   const supabase = await createClient();
-  const text = `${title}. ${description}`;
+  const text = `${title}. ${content}`;
   const embedding = await generateEmbedding(text);
 
-  // Query similar items using pgvector
-  const { data: similar, error } = await supabase.rpc('match_action_items', {
+  const rpcFunction = RPC_FUNCTIONS[entityType];
+  const { data: similar, error } = await supabase.rpc(rpcFunction, {
     query_embedding: embedding,
     match_threshold: threshold,
     match_count: 5,
@@ -56,7 +70,7 @@ export async function checkActionItemDuplicate(
   });
 
   if (error) {
-    log.error('Duplicate check failed for action item', {
+    log.error(`Duplicate check failed for ${entityType}`, {
       title,
       projectId,
       error: error.message,
@@ -71,14 +85,14 @@ export async function checkActionItemDuplicate(
 
   const durationMs = Date.now() - startTime;
   if (candidates.length > 0) {
-    log.info('Potential duplicates found for action item', {
+    log.info(`Potential duplicates found for ${entityType}`, {
       title,
       candidateCount: candidates.length,
       topSimilarity: candidates[0]?.similarity,
       durationMs,
     });
   } else {
-    log.debug('No duplicates found for action item', { title, durationMs });
+    log.debug(`No duplicates found for ${entityType}`, { title, durationMs });
   }
 
   return {
@@ -86,118 +100,42 @@ export async function checkActionItemDuplicate(
     candidates,
     embedding,
   };
+}
+
+/**
+ * Check for duplicates of an action item
+ */
+export function checkActionItemDuplicate(
+  title: string,
+  description: string,
+  projectId: string,
+  threshold: number = DEFAULT_THRESHOLD
+): Promise<DuplicateCheckResult> {
+  return checkDuplicate('action_item', title, description, projectId, threshold);
 }
 
 /**
  * Check for duplicates of a decision
  */
-export async function checkDecisionDuplicate(
+export function checkDecisionDuplicate(
   title: string,
   rationale: string,
   projectId: string,
   threshold: number = DEFAULT_THRESHOLD
 ): Promise<DuplicateCheckResult> {
-  const startTime = Date.now();
-  log.debug('Checking decision for duplicates', { title, projectId, threshold });
-  
-  const supabase = await createClient();
-  const text = `${title}. ${rationale}`;
-  const embedding = await generateEmbedding(text);
-
-  const { data: similar, error } = await supabase.rpc('match_decisions', {
-    query_embedding: embedding,
-    match_threshold: threshold,
-    match_count: 5,
-    p_project_id: projectId,
-  });
-
-  if (error) {
-    log.error('Duplicate check failed for decision', {
-      title,
-      projectId,
-      error: error.message,
-    });
-  }
-
-  const candidates: DuplicateCandidate[] = ((similar as MatchRpcResult[] | null) || []).map((item) => ({
-    id: item.id,
-    title: item.title,
-    similarity: item.similarity,
-  }));
-
-  const durationMs = Date.now() - startTime;
-  if (candidates.length > 0) {
-    log.info('Potential duplicates found for decision', {
-      title,
-      candidateCount: candidates.length,
-      topSimilarity: candidates[0]?.similarity,
-      durationMs,
-    });
-  } else {
-    log.debug('No duplicates found for decision', { title, durationMs });
-  }
-
-  return {
-    isDuplicate: candidates.length > 0,
-    candidates,
-    embedding,
-  };
+  return checkDuplicate('decision', title, rationale, projectId, threshold);
 }
 
 /**
  * Check for duplicates of a risk
  */
-export async function checkRiskDuplicate(
+export function checkRiskDuplicate(
   title: string,
   description: string,
   projectId: string,
   threshold: number = DEFAULT_THRESHOLD
 ): Promise<DuplicateCheckResult> {
-  const startTime = Date.now();
-  log.debug('Checking risk for duplicates', { title, projectId, threshold });
-  
-  const supabase = await createClient();
-  const text = `${title}. ${description}`;
-  const embedding = await generateEmbedding(text);
-
-  const { data: similar, error } = await supabase.rpc('match_risks', {
-    query_embedding: embedding,
-    match_threshold: threshold,
-    match_count: 5,
-    p_project_id: projectId,
-  });
-
-  if (error) {
-    log.error('Duplicate check failed for risk', {
-      title,
-      projectId,
-      error: error.message,
-    });
-  }
-
-  const candidates: DuplicateCandidate[] = ((similar as MatchRpcResult[] | null) || []).map((item) => ({
-    id: item.id,
-    title: item.title,
-    similarity: item.similarity,
-  }));
-
-  const durationMs = Date.now() - startTime;
-  if (candidates.length > 0) {
-    log.info('Potential duplicates found for risk', {
-      title,
-      candidateCount: candidates.length,
-      topSimilarity: candidates[0]?.similarity,
-      durationMs,
-    });
-  } else {
-    log.debug('No duplicates found for risk', { title, durationMs });
-  }
-
-  return {
-    isDuplicate: candidates.length > 0,
-    candidates,
-    embedding,
-  };
+  return checkDuplicate('risk', title, description, projectId, threshold);
 }
 
 /**
@@ -274,44 +212,26 @@ export async function checkProposedItemsDuplicates(
 
   let duplicatesFound = 0;
 
-  // Process action item results
-  for (const { temp_id, check } of actionItemResults) {
-    if (check.isDuplicate && check.candidates[0]) {
-      results.set(temp_id, {
-        duplicate_of: check.candidates[0].id,
-        similarity_score: check.candidates[0].similarity,
-      });
-      duplicatesFound++;
-    } else {
-      results.set(temp_id, { duplicate_of: null, similarity_score: null });
+  // Helper to process results
+  const processResults = (
+    items: Array<{ temp_id: string; check: DuplicateCheckResult }>
+  ) => {
+    for (const { temp_id, check } of items) {
+      if (check.isDuplicate && check.candidates[0]) {
+        results.set(temp_id, {
+          duplicate_of: check.candidates[0].id,
+          similarity_score: check.candidates[0].similarity,
+        });
+        duplicatesFound++;
+      } else {
+        results.set(temp_id, { duplicate_of: null, similarity_score: null });
+      }
     }
-  }
+  };
 
-  // Process decision results
-  for (const { temp_id, check } of decisionResults) {
-    if (check.isDuplicate && check.candidates[0]) {
-      results.set(temp_id, {
-        duplicate_of: check.candidates[0].id,
-        similarity_score: check.candidates[0].similarity,
-      });
-      duplicatesFound++;
-    } else {
-      results.set(temp_id, { duplicate_of: null, similarity_score: null });
-    }
-  }
-
-  // Process risk results
-  for (const { temp_id, check } of riskResults) {
-    if (check.isDuplicate && check.candidates[0]) {
-      results.set(temp_id, {
-        duplicate_of: check.candidates[0].id,
-        similarity_score: check.candidates[0].similarity,
-      });
-      duplicatesFound++;
-    } else {
-      results.set(temp_id, { duplicate_of: null, similarity_score: null });
-    }
-  }
+  processResults(actionItemResults);
+  processResults(decisionResults);
+  processResults(riskResults);
 
   const durationMs = Date.now() - startTime;
   log.info('Batch duplicate detection complete (parallel)', {
@@ -324,4 +244,3 @@ export async function checkProposedItemsDuplicates(
 
   return results;
 }
-

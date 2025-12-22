@@ -128,14 +128,22 @@ export async function POST(
         created_by_name: userProfile?.full_name || 'Unknown',
       };
 
-      // Update the action item
+      // Update the action item - handle both TEXT (JSON string) and JSONB formats
       let currentUpdates: StatusUpdate[] = [];
-      try {
-        const parsedUpdates = actionItem.updates ? JSON.parse(actionItem.updates) : [];
-        currentUpdates = Array.isArray(parsedUpdates) ? parsedUpdates : [];
-      } catch (parseError) {
-        log.warn('Failed to parse action item updates', { actionItemId: id, error: parseError instanceof Error ? parseError.message : 'Parse error' });
-        currentUpdates = [];
+      if (actionItem.updates) {
+        if (Array.isArray(actionItem.updates)) {
+          // JSONB format - already parsed
+          currentUpdates = actionItem.updates as StatusUpdate[];
+        } else if (typeof actionItem.updates === 'string') {
+          // TEXT format - needs parsing
+          try {
+            const parsedUpdates = JSON.parse(actionItem.updates);
+            currentUpdates = Array.isArray(parsedUpdates) ? parsedUpdates : [];
+          } catch (parseError) {
+            log.warn('Failed to parse action item updates', { actionItemId: id, error: parseError instanceof Error ? parseError.message : 'Parse error' });
+            currentUpdates = [];
+          }
+        }
       }
       const updatedUpdates = [...currentUpdates, update];
 

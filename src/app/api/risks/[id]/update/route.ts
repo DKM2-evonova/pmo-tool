@@ -132,14 +132,22 @@ export async function POST(
         created_by_name: userProfile?.full_name || 'Unknown',
       };
 
-      // Update the risk
+      // Update the risk - handle both TEXT (JSON string) and JSONB formats
       let currentUpdates: StatusUpdate[] = [];
-      try {
-        const parsedUpdates = risk.updates ? JSON.parse(risk.updates) : [];
-        currentUpdates = Array.isArray(parsedUpdates) ? parsedUpdates : [];
-      } catch (parseError) {
-        log.warn('Failed to parse risk updates', { riskId: id, error: parseError instanceof Error ? parseError.message : 'Parse error' });
-        currentUpdates = [];
+      if (risk.updates) {
+        if (Array.isArray(risk.updates)) {
+          // JSONB format - already parsed
+          currentUpdates = risk.updates as StatusUpdate[];
+        } else if (typeof risk.updates === 'string') {
+          // TEXT format - needs parsing
+          try {
+            const parsedUpdates = JSON.parse(risk.updates);
+            currentUpdates = Array.isArray(parsedUpdates) ? parsedUpdates : [];
+          } catch (parseError) {
+            log.warn('Failed to parse risk updates', { riskId: id, error: parseError instanceof Error ? parseError.message : 'Parse error' });
+            currentUpdates = [];
+          }
+        }
       }
       const updatedUpdates = [...currentUpdates, update];
 

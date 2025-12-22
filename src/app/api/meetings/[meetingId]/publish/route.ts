@@ -134,15 +134,22 @@ function createAIUpdateComment(params: AIUpdateParams): ActionItemUpdate | RiskU
 
 /**
  * Parses the existing updates array from an item, handling null/malformed data
+ * Handles both TEXT (JSON string) and JSONB (already parsed object) formats for compatibility
  */
-function parseExistingUpdates(updatesJson: string | null | undefined): unknown[] {
-  if (!updatesJson) return [];
-  try {
-    const parsed = JSON.parse(updatesJson);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
+function parseExistingUpdates(updates: string | unknown[] | null | undefined): unknown[] {
+  if (!updates) return [];
+  // Already an array (JSONB from database)
+  if (Array.isArray(updates)) return updates;
+  // String (TEXT from database) - parse as JSON
+  if (typeof updates === 'string') {
+    try {
+      const parsed = JSON.parse(updates);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
   }
+  return [];
 }
 
 export async function POST(

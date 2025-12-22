@@ -484,26 +484,64 @@ export function UpcomingMeetings() {
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchStatus();
-  }, []);
+    const abortController = new AbortController();
 
-  const fetchStatus = async () => {
-    try {
-      const response = await fetch('/api/google/calendar/status');
-      if (response.ok) {
-        const data = await response.json();
-        setStatus(data);
-
-        if (data.connected) {
-          await fetchEvents();
+    const fetchStatus = async () => {
+      try {
+        const response = await fetch('/api/google/calendar/status', {
+          signal: abortController.signal,
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (!abortController.signal.aborted) {
+            setStatus(data);
+            if (data.connected) {
+              await fetchEventsInternal(abortController.signal);
+            }
+          }
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
+        console.error('Failed to fetch calendar status:', err);
+      } finally {
+        if (!abortController.signal.aborted) {
+          setIsLoading(false);
         }
       }
-    } catch (err) {
-      console.error('Failed to fetch calendar status:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    };
+
+    const fetchEventsInternal = async (signal: AbortSignal) => {
+      try {
+        const response = await fetch('/api/google/calendar/events?mode=upcoming&daysAhead=7', {
+          signal,
+        });
+        if (signal.aborted) return;
+        if (response.ok) {
+          const data = await response.json();
+          setEvents(data.events || []);
+          setError(null);
+        } else {
+          const data = await response.json();
+          if (data.code === 'RECONNECT_REQUIRED') {
+            setStatus((prev) => (prev ? { ...prev, connected: false } : null));
+            setError('Calendar connection expired. Please reconnect.');
+          } else {
+            setError('Failed to load upcoming meetings');
+          }
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
+        console.error('Failed to fetch events:', err);
+        setError('Failed to load upcoming meetings');
+      }
+    };
+
+    fetchStatus();
+
+    return () => {
+      abortController.abort();
+    };
+  }, []);
 
   const fetchEvents = async () => {
     try {

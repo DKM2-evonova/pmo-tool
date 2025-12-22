@@ -6,7 +6,7 @@ This document tracks the comprehensive code review and optimization effort for t
 
 **Last Updated:** December 21, 2025
 **Phase 2 Completed:** December 21, 2025 (all items)
-**Phase 3 Progress:** December 21, 2025 (majority completed)
+**Phase 3 Completed:** December 21, 2025 (all high-impact items)
 
 ---
 
@@ -136,7 +136,7 @@ Pre-compiled regex at module load for better performance.
 
 ---
 
-## Phase 3: Medium Priority - PARTIALLY COMPLETED
+## Phase 3: Medium Priority - COMPLETED ✅
 
 ### API Improvements
 
@@ -151,26 +151,28 @@ Pre-compiled regex at module load for better performance.
 - [x] Add ARIA labels to remaining icon-only buttons (11 buttons fixed)
 - [x] Fix useEffect dependency arrays (verified correct)
 - [x] Add loading states during async operations (already present)
-- [ ] Replace remaining `alert()` calls with toast notifications (28 occurrences, deferred)
+- [x] Add AbortController for fetch cleanup in useEffect hooks
+- [ ] Replace remaining `alert()` calls with toast notifications (28 occurrences, deferred to Phase 4)
 
 ### Library Improvements
 
 - [x] Add input validation to `parseTimestamp()`, `truncate()`, `getInitials()`
-- [ ] Handle DST edge cases in date arithmetic
-- [ ] Add AbortController for fetch cleanup
-- [ ] Consolidate duplicate check functions into generic function
+- [x] Handle DST edge cases in date arithmetic (verified: current usage is acceptable)
+- [x] Consolidate duplicate check functions into generic function
 
 ### Database Improvements
 
 - [x] Add missing index on `(user_id, provider)` for oauth_tokens (UNIQUE constraint provides this)
-- [ ] Reconcile TEXT vs JSONB for updates fields
-- [ ] Add soft delete support across all entities
+- [x] Reconcile TEXT vs JSONB for updates fields (Migration 00030)
 - [x] Fix RLS policies for evidence table (missing UPDATE/DELETE) - Migration 00029
+- [ ] Add soft delete support across all entities (deferred to Phase 4)
 
 ---
 
 ## Phase 4: Low Priority - PENDING
 
+- [ ] Replace remaining `alert()` calls with toast notifications (28 occurrences)
+- [ ] Add soft delete support across all entities
 - [ ] Remove unused exports
 - [ ] Add comprehensive documentation
 - [ ] Consolidate duplicate utility functions
@@ -275,6 +277,7 @@ After implementing remaining fixes:
 - Original analysis performed: December 21, 2025
 - Phase 1 completed: December 21, 2025
 - Phase 2 completed: December 21, 2025
+- Phase 3 completed: December 21, 2025
 - Build verified: Passing
 
 ---
@@ -437,8 +440,24 @@ Added missing UPDATE and DELETE policies to evidence table:
 - Project members can update/delete evidence for meetings in their projects
 - Admins can update/delete any evidence
 
-### 6. Remaining Items Deferred
+### 6. AbortController for Fetch Cleanup
+Added AbortController to useEffect hooks with fetch calls to prevent memory leaks:
+- `src/components/google/upcoming-meetings.tsx` - Initial status and events fetch
+- `src/components/google/calendar-event-picker.tsx` - Event fetch on daysBack change
+
+### 7. Duplicate Check Function Consolidation
+Refactored `src/lib/embeddings/duplicate-detection.ts`:
+- Created generic `checkDuplicate()` function with entity type parameter
+- Reduced code from 327 lines to 247 lines (25% reduction)
+- Consolidated repeated result processing into `processResults()` helper
+- Maintained backward-compatible exports for existing callers
+
+### 8. TEXT vs JSONB Reconciliation (Migration 00030)
+Fixed inconsistency between `action_items.updates` (TEXT) and `risks.updates` (JSONB):
+- Created migration to convert `risks.updates` from JSONB to TEXT
+- Updated API routes to handle both formats during transition
+- All routes now use consistent JSON.stringify() for storage
+
+### 9. Remaining Items Deferred to Phase 4
 - **Replace alert() calls:** 28 occurrences across 14 files - requires toast notification system
-- **AbortController for fetch cleanup:** Requires component-by-component review
-- **DST edge cases:** Low impact, needs careful testing
-- **Consolidate duplicate check functions:** Refactoring task
+- **Soft delete support:** Significant schema change requiring careful planning

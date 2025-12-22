@@ -17,7 +17,47 @@ export function CalendarEventPicker({ onSelect, onCancel }: CalendarEventPickerP
   const [daysBack, setDaysBack] = useState(14);
 
   useEffect(() => {
-    fetchEvents();
+    const abortController = new AbortController();
+
+    const fetchEventsInternal = async () => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch(`/api/google/calendar/events?mode=recent&daysBack=${daysBack}`, {
+          signal: abortController.signal,
+        });
+
+        if (abortController.signal.aborted) return;
+
+        if (!response.ok) {
+          const data = await response.json();
+          if (data.code === 'RECONNECT_REQUIRED') {
+            setError('Calendar connection expired. Please reconnect in your profile settings.');
+          } else {
+            throw new Error(data.error || 'Failed to fetch events');
+          }
+          return;
+        }
+
+        const data = await response.json();
+        setEvents(data.events || []);
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
+        setError('Failed to load calendar events');
+        console.error('Error fetching calendar events:', err);
+      } finally {
+        if (!abortController.signal.aborted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchEventsInternal();
+
+    return () => {
+      abortController.abort();
+    };
   }, [daysBack]);
 
   const fetchEvents = async () => {
