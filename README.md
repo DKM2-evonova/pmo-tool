@@ -457,6 +457,7 @@ Proprietary - All rights reserved
 - **Product Requirements**: See `PRD - MDs/` directory for detailed specifications
 - **Database Schema**: See `supabase/migrations/` for schema definitions
 - **Type Definitions**: See `src/types/` for TypeScript interfaces
-- **Changelog**: See `CHANGELOG.md` for version history and recent changes
-- **Resolved Issues**: See `docs/RESOLVED_ISSUES.md` for historical debugging reference
+- **Changelog**: See `CHANGELOG.md` for version history
+- **Google Calendar Setup**: See `docs/GOOGLE_CALENDAR_INTEGRATION.md`
+- **Code Optimizations**: See `docs/CODE_OPTIMIZATION_PLAN.md` for optimization summary
 
