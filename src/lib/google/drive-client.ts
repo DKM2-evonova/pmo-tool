@@ -1,0 +1,502 @@
+/**
+ * Google Drive API Client
+ * Handles all Drive API interactions for transcript ingestion
+ */
+
+import { getValidAccessToken, getValidAccessTokenService } from './drive-oauth';
+import type {
+  GoogleDriveFile,
+  GoogleDriveFileList,
+  GoogleDriveWatchResponse,
+  GoogleDriveChangesResponse,
+  GoogleDriveStartPageTokenResponse,
+  DriveFile,
+  DriveFileList,
+  TRANSCRIPT_MIME_TYPES,
+  FOLDER_MIME_TYPE,
+} from './drive-types';
+
+const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
+
+// MIME types we consider as potential transcripts
+const SUPPORTED_MIME_TYPES = [
+  'application/vnd.google-apps.document', // Google Docs
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // DOCX
+  'application/pdf',
+  'text/plain',
+  'application/rtf',
+];
+
+/**
+ * Transform Google Drive file to our simplified format
+ */
+function transformDriveFile(file: GoogleDriveFile): DriveFile {
+  return {
+    id: file.id,
+    name: file.name,
+    mimeType: file.mimeType,
+    modifiedTime: file.modifiedTime,
+    createdTime: file.createdTime,
+    size: file.size ? parseInt(file.size, 10) : undefined,
+    webViewLink: file.webViewLink,
+    isFolder: file.mimeType === 'application/vnd.google-apps.folder',
+  };
+}
+
+/**
+ * List folders in the user's Drive (for folder selection)
+ */
+export async function listFolders(
+  userId: string,
+  options: {
+    searchQuery?: string;
+    pageToken?: string;
+    maxResults?: number;
+  } = {}
+): Promise<DriveFileList> {
+  const accessToken = await getValidAccessToken(userId);
+  if (!accessToken) {
+    throw new Error('No valid access token available. Please reconnect your Drive.');
+  }
+
+  const { searchQuery, pageToken, maxResults = 50 } = options;
+
+  // Build query to find folders
+  let query = "mimeType = 'application/vnd.google-apps.folder' and trashed = false";
+  if (searchQuery) {
+    query += ` and name contains '${searchQuery.replace(/'/g, "\\'")}'`;
+  }
+
+  const params = new URLSearchParams({
+    q: query,
+    fields: 'nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,webViewLink)',
+    pageSize: maxResults.toString(),
+    orderBy: 'name',
+    ...(pageToken && { pageToken }),
+  });
+
+  const response = await fetch(`${DRIVE_API_BASE}/files?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to list folders: ${error}`);
+  }
+
+  const data: GoogleDriveFileList = await response.json();
+
+  return {
+    files: (data.files || []).map(transformDriveFile),
+    nextPageToken: data.nextPageToken,
+  };
+}
+
+/**
+ * Find the "Meet Recordings" folder automatically
+ */
+export async function findMeetRecordingsFolder(userId: string): Promise<DriveFile | null> {
+  const accessToken = await getValidAccessToken(userId);
+  if (!accessToken) {
+    throw new Error('No valid access token available. Please reconnect your Drive.');
+  }
+
+  // Search for folder with exact name "Meet Recordings"
+  const query = "mimeType = 'application/vnd.google-apps.folder' and name = 'Meet Recordings' and trashed = false";
+
+  const params = new URLSearchParams({
+    q: query,
+    fields: 'files(id,name,mimeType,modifiedTime,createdTime,webViewLink)',
+    pageSize: '1',
+  });
+
+  const response = await fetch(`${DRIVE_API_BASE}/files?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to search for Meet Recordings folder: ${error}`);
+  }
+
+  const data: GoogleDriveFileList = await response.json();
+
+  if (data.files && data.files.length > 0) {
+    return transformDriveFile(data.files[0]);
+  }
+
+  return null;
+}
+
+/**
+ * List files in a specific folder
+ */
+export async function listFilesInFolder(
+  userId: string,
+  folderId: string,
+  options: {
+    pageToken?: string;
+    maxResults?: number;
+    modifiedAfter?: string; // ISO date string
+    useServiceClient?: boolean;
+  } = {}
+): Promise<DriveFileList> {
+  const accessToken = options.useServiceClient
+    ? await getValidAccessTokenService(userId)
+    : await getValidAccessToken(userId);
+
+  if (!accessToken) {
+    throw new Error('No valid access token available. Please reconnect your Drive.');
+  }
+
+  const { pageToken, maxResults = 100, modifiedAfter } = options;
+
+  // Build query to find files in folder
+  let query = `'${folderId}' in parents and trashed = false`;
+
+  // Filter to only transcript-like files
+  const mimeTypeFilters = SUPPORTED_MIME_TYPES.map((m) => `mimeType = '${m}'`).join(' or ');
+  query += ` and (${mimeTypeFilters})`;
+
+  // Filter by modification time if provided
+  if (modifiedAfter) {
+    query += ` and modifiedTime > '${modifiedAfter}'`;
+  }
+
+  const params = new URLSearchParams({
+    q: query,
+    fields: 'nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,size,webViewLink)',
+    pageSize: maxResults.toString(),
+    orderBy: 'modifiedTime desc',
+    ...(pageToken && { pageToken }),
+  });
+
+  const response = await fetch(`${DRIVE_API_BASE}/files?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to list files in folder: ${error}`);
+  }
+
+  const data: GoogleDriveFileList = await response.json();
+
+  return {
+    files: (data.files || []).map(transformDriveFile),
+    nextPageToken: data.nextPageToken,
+  };
+}
+
+/**
+ * Get a single file's metadata
+ */
+export async function getFile(
+  userId: string,
+  fileId: string,
+  useServiceClient: boolean = false
+): Promise<DriveFile | null> {
+  const accessToken = useServiceClient
+    ? await getValidAccessTokenService(userId)
+    : await getValidAccessToken(userId);
+
+  if (!accessToken) {
+    throw new Error('No valid access token available. Please reconnect your Drive.');
+  }
+
+  const params = new URLSearchParams({
+    fields: 'id,name,mimeType,modifiedTime,createdTime,size,webViewLink',
+  });
+
+  const response = await fetch(`${DRIVE_API_BASE}/files/${fileId}?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      return null;
+    }
+    const error = await response.text();
+    throw new Error(`Failed to get file: ${error}`);
+  }
+
+  const file: GoogleDriveFile = await response.json();
+  return transformDriveFile(file);
+}
+
+/**
+ * Download a file's content as binary
+ */
+export async function downloadFile(
+  userId: string,
+  fileId: string,
+  useServiceClient: boolean = false
+): Promise<ArrayBuffer> {
+  const accessToken = useServiceClient
+    ? await getValidAccessTokenService(userId)
+    : await getValidAccessToken(userId);
+
+  if (!accessToken) {
+    throw new Error('No valid access token available. Please reconnect your Drive.');
+  }
+
+  const response = await fetch(`${DRIVE_API_BASE}/files/${fileId}?alt=media`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to download file: ${error}`);
+  }
+
+  return response.arrayBuffer();
+}
+
+/**
+ * Export a Google Doc to a specific format
+ */
+export async function exportGoogleDoc(
+  userId: string,
+  fileId: string,
+  exportMimeType: string = 'text/plain',
+  useServiceClient: boolean = false
+): Promise<string> {
+  const accessToken = useServiceClient
+    ? await getValidAccessTokenService(userId)
+    : await getValidAccessToken(userId);
+
+  if (!accessToken) {
+    throw new Error('No valid access token available. Please reconnect your Drive.');
+  }
+
+  const params = new URLSearchParams({
+    mimeType: exportMimeType,
+  });
+
+  const response = await fetch(`${DRIVE_API_BASE}/files/${fileId}/export?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to export Google Doc: ${error}`);
+  }
+
+  return response.text();
+}
+
+/**
+ * Get the start page token for watching changes
+ */
+export async function getStartPageToken(
+  userId: string,
+  useServiceClient: boolean = false
+): Promise<string> {
+  const accessToken = useServiceClient
+    ? await getValidAccessTokenService(userId)
+    : await getValidAccessToken(userId);
+
+  if (!accessToken) {
+    throw new Error('No valid access token available. Please reconnect your Drive.');
+  }
+
+  const response = await fetch(`${DRIVE_API_BASE}/changes/startPageToken`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to get start page token: ${error}`);
+  }
+
+  const data: GoogleDriveStartPageTokenResponse = await response.json();
+  return data.startPageToken;
+}
+
+/**
+ * Get changes since a page token
+ */
+export async function getChanges(
+  userId: string,
+  pageToken: string,
+  useServiceClient: boolean = false
+): Promise<GoogleDriveChangesResponse> {
+  const accessToken = useServiceClient
+    ? await getValidAccessTokenService(userId)
+    : await getValidAccessToken(userId);
+
+  if (!accessToken) {
+    throw new Error('No valid access token available. Please reconnect your Drive.');
+  }
+
+  const params = new URLSearchParams({
+    pageToken,
+    fields: 'nextPageToken,newStartPageToken,changes(fileId,removed,file(id,name,mimeType,modifiedTime,parents,trashed))',
+    pageSize: '100',
+    includeRemoved: 'false',
+  });
+
+  const response = await fetch(`${DRIVE_API_BASE}/changes?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to get changes: ${error}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Set up a watch channel for a folder
+ */
+export async function setupWatchChannel(
+  userId: string,
+  folderId: string,
+  webhookUrl: string,
+  channelId: string,
+  channelToken: string,
+  expirationMs: number = 24 * 60 * 60 * 1000 // 24 hours default
+): Promise<GoogleDriveWatchResponse> {
+  const accessToken = await getValidAccessToken(userId);
+  if (!accessToken) {
+    throw new Error('No valid access token available. Please reconnect your Drive.');
+  }
+
+  // Note: Drive API watch is on changes, not on specific folders
+  // We watch the user's entire Drive and filter by folder in webhook handler
+  const expiration = Date.now() + expirationMs;
+
+  const response = await fetch(`${DRIVE_API_BASE}/changes/watch?pageToken=`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      id: channelId,
+      type: 'web_hook',
+      address: webhookUrl,
+      token: channelToken,
+      expiration: expiration.toString(),
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to set up watch channel: ${error}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Stop a watch channel
+ */
+export async function stopWatchChannel(
+  userId: string,
+  channelId: string,
+  resourceId: string
+): Promise<void> {
+  const accessToken = await getValidAccessToken(userId);
+  if (!accessToken) {
+    // Can't stop channel without token, but that's okay - it will expire
+    console.warn('Cannot stop watch channel: no valid access token');
+    return;
+  }
+
+  const response = await fetch(`${DRIVE_API_BASE}/channels/stop`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      id: channelId,
+      resourceId: resourceId,
+    }),
+  });
+
+  if (!response.ok) {
+    // Don't throw - channel might already be stopped or expired
+    console.warn('Failed to stop watch channel:', await response.text());
+  }
+}
+
+/**
+ * Check if a file is a supported transcript type
+ */
+export function isSupportedTranscriptType(mimeType: string): boolean {
+  return SUPPORTED_MIME_TYPES.includes(mimeType);
+}
+
+/**
+ * Check if a file appears to be from Google Meet
+ * Heuristic: filename matches patterns like "Meeting Name - YYYY-MM-DD"
+ */
+export function looksLikeMeetTranscript(fileName: string): boolean {
+  // Common patterns:
+  // "Meeting Name - 2024-01-15 14.30.00 GMT"
+  // "Weekly Standup - January 15, 2024"
+  // Files in "Meet Recordings" folder are likely transcripts
+
+  // Check for date-like patterns in filename
+  const datePatterns = [
+    /\d{4}-\d{2}-\d{2}/, // YYYY-MM-DD
+    /\d{2}\.\d{2}\.\d{2}/, // HH.MM.SS (time in filename)
+    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}/i,
+  ];
+
+  return datePatterns.some((pattern) => pattern.test(fileName));
+}
+
+/**
+ * Parse meeting info from a Google Meet transcript filename
+ */
+export function parseMeetingFromFilename(fileName: string): { title: string; date: string } {
+  // Remove extension
+  const name = fileName.replace(/\.[^.]+$/, '');
+
+  // Try to extract date pattern YYYY-MM-DD
+  const isoDateMatch = name.match(/(\d{4}-\d{2}-\d{2})/);
+  if (isoDateMatch) {
+    const date = isoDateMatch[1];
+    // Title is everything before the date pattern
+    const titlePart = name.substring(0, name.indexOf(isoDateMatch[1]));
+    const title = titlePart.replace(/\s*[-–—]\s*$/, '').trim();
+    return {
+      title: title || 'Imported Meeting',
+      date,
+    };
+  }
+
+  // Try natural date format: "January 15, 2024"
+  const naturalDateMatch = name.match(
+    /(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(\d{4})/i
+  );
+  if (naturalDateMatch) {
+    const monthNames: Record<string, string> = {
+      january: '01', february: '02', march: '03', april: '04',
+      may: '05', june: '06', july: '07', august: '08',
+      september: '09', october: '10', november: '11', december: '12',
+    };
+    const month = monthNames[naturalDateMatch[1].toLowerCase()];
+    const day = naturalDateMatch[2].padStart(2, '0');
+    const year = naturalDateMatch[3];
+    const date = `${year}-${month}-${day}`;
+
+    const titlePart = name.substring(0, name.indexOf(naturalDateMatch[0]));
+    const title = titlePart.replace(/\s*[-–—]\s*$/, '').trim();
+    return {
+      title: title || 'Imported Meeting',
+      date,
+    };
+  }
+
+  // Fallback: use today's date and full filename as title
+  return {
+    title: name.trim() || 'Imported Meeting',
+    date: new Date().toISOString().split('T')[0],
+  };
+}

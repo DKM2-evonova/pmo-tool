@@ -13,6 +13,7 @@ The PMO Tool is an automation layer that sits on top of an organization's existi
 ## Features
 
 - **Meeting Processing**: Upload transcripts (VTT, TXT, DOCX, PDF) or import from Google Calendar
+- **Google Drive Auto-Ingestion**: Automatically import meeting transcripts from Google Drive's "Meet Recordings" folder
 - **AI Extraction**: Uses Gemini 3 Pro Preview and GPT-5.2 to extract structured data with evidence citations
 - **Context-Aware Updates**: Favors updating existing items over creating duplicates using semantic matching
 - **Smart Context Filtering**: Uses vector similarity to filter relevant open items, reducing token usage for large projects
@@ -116,6 +117,14 @@ OPENAI_API_KEY=your-openai-key
 GOOGLE_CALENDAR_CLIENT_ID=your-google-oauth-client-id
 GOOGLE_CALENDAR_CLIENT_SECRET=your-google-oauth-client-secret
 GOOGLE_CALENDAR_REDIRECT_URI=http://localhost:3000/api/google/calendar/callback
+
+# Optional: Google Drive Integration (for auto-importing transcripts)
+GOOGLE_DRIVE_CLIENT_ID=your-google-oauth-client-id
+GOOGLE_DRIVE_CLIENT_SECRET=your-google-oauth-client-secret
+GOOGLE_DRIVE_REDIRECT_URI=http://localhost:3000/api/google/drive/callback
+WEBHOOK_SECRET=random-string-for-webhook-verification
+CRON_SECRET=random-string-for-cron-authentication
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
 **Note**: Never commit `.env.local` to version control. It's already included in `.gitignore`.
@@ -143,7 +152,14 @@ npx supabase db push
    - Add authorized redirect URI: `http://localhost:3000/api/google/calendar/callback` (or your production URL)
    - Copy the Client ID and Client Secret to your `.env.local` file
 
-7. Start the development server:
+7. (Optional) Set up Google Drive auto-ingestion:
+   - Enable the **Google Drive API** in the same Google Cloud project
+   - Add authorized redirect URI: `http://localhost:3000/api/google/drive/callback`
+   - You can reuse the same OAuth credentials from Google Calendar
+   - Generate random secrets for `WEBHOOK_SECRET` and `CRON_SECRET`
+   - See `docs/GOOGLE_DRIVE_INTEGRATION.md` for detailed setup
+
+8. Start the development server:
 ```bash
 npm run dev
 ```
@@ -381,6 +397,22 @@ This filtered context is injected into the LLM prompt to favor UPDATE/CLOSE oper
 - Embeddings generated/regenerated on Publish
 - Flagged items appear in Review UI as 'Potential Duplicate'
 
+### Google Drive Auto-Ingestion
+
+Automatically imports meeting transcripts from Google Drive's "Meet Recordings" folder:
+
+- **Real-time Detection**: Uses Google Drive Push Notifications (webhooks) for instant detection of new files
+- **Hourly Backup Polling**: Vercel cron job ensures no files are missed if webhooks fail
+- **Draft Status**: Imported meetings are created in Draft status for user review and project assignment
+- **Multi-User Deduplication**: Content fingerprinting (SHA-256) and title/date matching prevent duplicate imports when multiple attendees have the same recording
+- **Supported Formats**: Google Docs transcripts, DOCX, PDF, TXT, RTF
+
+**User Workflow**:
+1. Connect Google Drive from Profile > Integrations
+2. Add the "Meet Recordings" folder (auto-detected)
+3. New transcripts are automatically imported as Draft meetings
+4. Review and assign to projects before processing
+
 ### Decision Log
 
 - Comprehensive decision tracking across all meeting categories
@@ -459,5 +491,6 @@ Proprietary - All rights reserved
 - **Type Definitions**: See `src/types/` for TypeScript interfaces
 - **Changelog**: See `CHANGELOG.md` for version history
 - **Google Calendar Setup**: See `docs/GOOGLE_CALENDAR_INTEGRATION.md`
+- **Google Drive Setup**: See `docs/GOOGLE_DRIVE_INTEGRATION.md`
 - **Code Optimizations**: See `docs/CODE_OPTIMIZATION_PLAN.md` for optimization summary
 
