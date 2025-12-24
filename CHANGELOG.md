@@ -4,6 +4,37 @@ All notable changes to the PMO Tool are documented here.
 
 ---
 
+## [1.2.0] - December 24, 2025
+
+### Added
+- **Decision Log Overhaul**: Complete redesign to support hybrid projects (Software Development + Business Process Transformation)
+  - **Smart IDs**: Auto-generated category-prefixed IDs (e.g., TECH-001, PROC-042, GOV-015)
+  - **6 Categories**: Process & Operating Model (PROC), Technology & Systems (TECH), Data & Reporting (DATA), People & Change Management (PPL), Governance & Compliance (GOV), Strategy & Commercial (STRAT)
+  - **5 Impact Areas**: Scope, Cost/Budget, Time/Schedule, Risk, Customer Experience (multi-select)
+  - **Status Lifecycle**: Proposed → Approved / Rejected / Superseded
+  - **Superseded Workflow**: Link replacement decisions with visual indicators
+  - **Manual Decision Entry**: Create decisions directly (marked with icon indicator)
+  - **Faceted Filtering**: Sidebar with category, impact, and status checkboxes with counts
+  - **Saved Views**: Pre-configured filter presets (Technical, Business Process, Governance, Active, Pending)
+  - **LLM Auto-Classification**: AI automatically assigns category and impact areas during meeting processing
+- New database migration (`00032_decision_log_overhaul.sql`) with:
+  - PostgreSQL enums for type safety
+  - Atomic Smart ID generation via triggers
+  - Superseded constraint validation
+  - GIN index for efficient array filtering
+- New API routes:
+  - `POST /api/decisions` - Create manual decisions
+  - `PATCH /api/decisions/[id]` - Update decision fields
+  - `DELETE /api/decisions/[id]` - Delete decisions
+  - `POST /api/decisions/[id]/supersede` - Mark decision as superseded
+
+### Changed
+- Decision detail page now displays Smart ID, category badge, status badge, and impact chips
+- Decisions table updated with new columns and superseded row styling
+- LLM prompts updated with category classification rules
+
+---
+
 ## [1.1.1] - December 21, 2025
 
 ### Added
@@ -95,6 +126,7 @@ All notable changes to the PMO Tool are documented here.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 1.2.0 | Dec 24, 2025 | Decision Log overhaul (Smart IDs, categories, faceted filters) |
 | 1.1.1 | Dec 21, 2025 | Milestones in status reports (dashboard + Excel) |
 | 1.1.0 | Dec 21, 2025 | Code optimization complete, toast system |
 | 1.0.0 | Dec 15, 2025 | Liquid Glass UI, Google Calendar, security hardening |

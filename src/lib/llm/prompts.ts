@@ -149,9 +149,13 @@ Return a JSON object matching this exact schema:
   "decisions": [
     {
       "operation": "create|update",
+      "external_id": "ID of existing decision if update, null if create",
       "title": "Decision title",
       "rationale": "Why this decision was made",
-      "impact": "Expected impact",
+      "impact": "Expected impact description",
+      "category": "PROCESS_OP_MODEL|TECHNOLOGY_SYSTEMS|DATA_REPORTING|PEOPLE_CHANGE_MGMT|GOVERNANCE_COMPLIANCE|STRATEGY_COMMERCIAL",
+      "impact_areas": ["SCOPE", "COST_BUDGET", "TIME_SCHEDULE", "RISK", "CUSTOMER_EXP"],
+      "status": "PROPOSED|APPROVED|REJECTED",
       "decision_maker": {"name": "string", "email": "string or null"},
       "outcome": "What was decided (REQUIRED for Governance)",
       "evidence": [{"quote": "...", "speaker": "...", "timestamp": "..."}]
@@ -197,6 +201,28 @@ Return a JSON object matching this exact schema:
 8. KEY TOPICS: Identify 3-5 major discussion topics. Include detailed context about what was discussed and who participated.
 9. ACTION ITEMS SUMMARY: The action_items_summary in recap MUST correspond to items in the action_items array. Include all action items.
 10. OUTSTANDING TOPICS: Identify any topics that were raised but NOT resolved in this meeting. Include blockers and suggested next steps.
+
+## Decision Classification Rules
+
+11. DECISION CATEGORY (required - assign exactly ONE):
+   - PROCESS_OP_MODEL: Workflows, SOPs, business logic, operating model changes
+   - TECHNOLOGY_SYSTEMS: Infrastructure, tech stack, tools, system architecture
+   - DATA_REPORTING: KPIs, database schema, analytics, data definitions
+   - PEOPLE_CHANGE_MGMT: Org structure, training, roles, UX/UI, staffing
+   - GOVERNANCE_COMPLIANCE: Legal, security, audit, policies, SOX, regulatory
+   - STRATEGY_COMMERCIAL: Budget, vendor selection, scope, MVP, partnerships
+
+12. DECISION IMPACT AREAS (select 1-5 that apply):
+   - SCOPE: Changes to project scope or requirements
+   - COST_BUDGET: Budget or cost implications
+   - TIME_SCHEDULE: Timeline or schedule impact
+   - RISK: Risk profile changes
+   - CUSTOMER_EXP: Customer experience impact
+
+13. DECISION STATUS (set based on meeting discussion):
+   - PROPOSED: Decision was raised but needs further discussion/approval
+   - APPROVED: Decision was clearly approved in this meeting
+   - REJECTED: Decision was explicitly rejected
 
 Return ONLY the JSON object, no additional text.`;
 }

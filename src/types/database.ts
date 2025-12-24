@@ -12,6 +12,10 @@ import type {
   EntityType,
   ToneLevel,
   MilestoneStatus,
+  DecisionCategory,
+  DecisionImpactArea,
+  DecisionStatus,
+  DecisionSource,
 } from './enums';
 
 // Base entity with common fields
@@ -215,13 +219,20 @@ export interface ActionItemWithOwner extends ActionItem {
 // Decision
 export interface Decision extends BaseEntity {
   project_id: string;
+  smart_id: string | null;
   title: string;
   rationale: string | null;
   impact: string | null;
+  category: DecisionCategory | null;
+  impact_areas: DecisionImpactArea[];
+  status: DecisionStatus;
   decision_maker_user_id: string | null;
   decision_maker_name: string | null;
   decision_maker_email: string | null;
   outcome: string | null;
+  decision_date: string | null;
+  superseded_by_id: string | null;
+  source: DecisionSource;
   embedding: number[] | null;
   source_meeting_id: string | null;
 }
@@ -229,6 +240,8 @@ export interface Decision extends BaseEntity {
 export interface DecisionWithMaker extends Decision {
   decision_maker?: Profile | null;
   source_meeting?: Meeting | null;
+  project?: { id: string; name: string } | null;
+  superseded_by?: Decision | null;
 }
 
 // Risk
@@ -299,9 +312,13 @@ export interface ProposedActionItem {
 export interface ProposedDecision {
   temp_id: string;
   operation: 'create' | 'update';
+  external_id?: string | null;
   title: string;
   rationale: string;
   impact: string;
+  category: DecisionCategory;
+  impact_areas: DecisionImpactArea[];
+  status: DecisionStatus;
   decision_maker: ProposedOwner;
   decision_maker_resolution_status: string;
   outcome: string;

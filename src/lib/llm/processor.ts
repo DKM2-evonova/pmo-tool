@@ -52,6 +52,9 @@ interface RawLLMOutput {
     [key: string]: unknown;
   };
   decisions?: Array<{
+    category?: string;
+    impact_areas?: string[];
+    status?: string;
     evidence?: Array<{ timestamp?: string; [key: string]: unknown }>;
     [key: string]: unknown;
   }>;
@@ -162,10 +165,48 @@ function cleanupLLMOutput(data: unknown): RawLLMOutput | unknown {
     }));
   }
 
+  // Fix decision category (normalize to uppercase enum values)
+  const fixDecisionCategory = (category: string | undefined): string => {
+    if (!category) return 'PROCESS_OP_MODEL'; // Default
+    const normalized = category.toUpperCase().replace(/[- ]/g, '_');
+    const validCategories = [
+      'PROCESS_OP_MODEL',
+      'TECHNOLOGY_SYSTEMS',
+      'DATA_REPORTING',
+      'PEOPLE_CHANGE_MGMT',
+      'GOVERNANCE_COMPLIANCE',
+      'STRATEGY_COMMERCIAL',
+    ];
+    return validCategories.includes(normalized) ? normalized : 'PROCESS_OP_MODEL';
+  };
+
+  // Fix decision impact areas (normalize to uppercase enum values)
+  const fixDecisionImpactAreas = (areas: string[] | undefined): string[] => {
+    if (!Array.isArray(areas) || areas.length === 0) return ['SCOPE'];
+    const validAreas = ['SCOPE', 'COST_BUDGET', 'TIME_SCHEDULE', 'RISK', 'CUSTOMER_EXP'];
+    const normalized = areas
+      .map((a) => a.toUpperCase().replace(/[- ]/g, '_'))
+      .filter((a) => validAreas.includes(a));
+    return normalized.length > 0 ? normalized : ['SCOPE'];
+  };
+
+  // Fix decision status (normalize to uppercase enum values)
+  const fixDecisionStatus = (status: string | undefined): string => {
+    if (!status) return 'PROPOSED';
+    const normalized = status.toUpperCase();
+    if (normalized === 'PROPOSED') return 'PROPOSED';
+    if (normalized === 'APPROVED') return 'APPROVED';
+    if (normalized === 'REJECTED') return 'REJECTED';
+    return 'PROPOSED';
+  };
+
   // Fix decisions
   if (Array.isArray(cleaned.decisions)) {
     cleaned.decisions = cleaned.decisions.map((d: any) => ({
       ...d,
+      category: fixDecisionCategory(d.category),
+      impact_areas: fixDecisionImpactAreas(d.impact_areas),
+      status: fixDecisionStatus(d.status),
       evidence: Array.isArray(d.evidence)
         ? d.evidence.map((e: any) => ({
             ...e,
@@ -462,9 +503,13 @@ function transformToProposedItems(
     return {
       temp_id: generateId(),
       operation: d.operation,
+      external_id: (d as any).external_id || null,
       title: d.title,
       rationale: d.rationale,
       impact: d.impact,
+      category: d.category as any,
+      impact_areas: d.impact_areas as any,
+      status: d.status as any,
       decision_maker: {
         name: resolved.name,
         email: resolved.email,

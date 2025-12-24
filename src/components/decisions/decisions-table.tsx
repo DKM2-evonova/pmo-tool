@@ -1,22 +1,37 @@
 'use client';
 
 import Link from 'next/link';
-import { Badge } from '@/components/ui';
 import { formatDateReadable, getInitials, cn } from '@/lib/utils';
-import { FileText, ChevronRight, Calendar, ExternalLink } from 'lucide-react';
+import { FileText, ChevronRight, Calendar, ExternalLink, PenLine } from 'lucide-react';
+import { DecisionSmartId } from './decision-smart-id';
+import { DecisionCategoryBadge } from './decision-category-badge';
+import { DecisionStatusBadge } from './decision-status-badge';
+import { DecisionImpactChips } from './decision-impact-chips';
+import { DecisionSupersededLink } from './decision-superseded-link';
+import type { DecisionCategory, DecisionImpactArea, DecisionStatus, DecisionSource } from '@/types/enums';
+
+interface DecisionRow {
+  id: string;
+  smart_id: string | null;
+  title: string;
+  rationale: string | null;
+  category: DecisionCategory | null;
+  impact_areas: DecisionImpactArea[];
+  status: DecisionStatus;
+  outcome: string | null;
+  decision_date: string | null;
+  source: DecisionSource;
+  created_at: string;
+  superseded_by_id: string | null;
+  superseded_by?: { smart_id: string | null } | null;
+  project?: { name: string } | null;
+  decision_maker?: { full_name: string | null; avatar_url: string | null } | null;
+  decision_maker_name: string | null;
+  source_meeting?: { id: string; title: string; date: string | null } | null;
+}
 
 interface DecisionsTableProps {
-  decisions: Array<{
-    id: string;
-    title: string;
-    rationale: string | null;
-    outcome: string | null;
-    created_at: string;
-    project?: { name: string } | null;
-    decision_maker?: { full_name: string | null; avatar_url: string | null } | null;
-    decision_maker_name: string | null;
-    source_meeting?: { id: string; title: string; date: string | null } | null;
-  }>;
+  decisions: DecisionRow[];
 }
 
 export function DecisionsTable({ decisions }: DecisionsTableProps) {
@@ -27,10 +42,10 @@ export function DecisionsTable({ decisions }: DecisionsTableProps) {
           <FileText className="h-8 w-8 text-surface-400" />
         </div>
         <h3 className="text-lg font-semibold text-surface-900">
-          No decisions yet
+          No decisions found
         </h3>
         <p className="mt-1.5 text-surface-500 max-w-sm">
-          Decisions will appear here after processing meetings
+          Decisions will appear here after processing meetings or creating them manually
         </p>
       </div>
     );
@@ -42,150 +57,176 @@ export function DecisionsTable({ decisions }: DecisionsTableProps) {
         <table className="w-full">
           <thead>
             <tr className="border-b border-surface-200/60 bg-surface-50/50">
-              <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-surface-500">
+              <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-surface-500">
+                ID
+              </th>
+              <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-surface-500">
                 Decision
               </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-surface-500">
-                Project
+              <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-surface-500">
+                Category
               </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-surface-500">
-                Decision Date
+              <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-surface-500">
+                Impact
               </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-surface-500">
-                Decision Maker
-              </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-surface-500">
-                Source Meeting
-              </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-surface-500">
+              <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-surface-500">
                 Status
               </th>
-              <th className="px-6 py-4"></th>
+              <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-surface-500">
+                Decision Maker
+              </th>
+              <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-surface-500">
+                Date
+              </th>
+              <th className="px-4 py-4"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-surface-100/60">
-            {decisions.map((decision, index) => (
-              <tr
-                key={decision.id}
-                className={cn(
-                  'group transition-colors duration-150',
-                  'hover:bg-white/60',
-                  'animate-fade-in'
-                )}
-                style={{ animationDelay: `${index * 30}ms` }}
-              >
-                <td className="px-6 py-4">
-                  <div>
-                    <Link
-                      href={`/decisions/${decision.id}`}
-                      className="font-medium text-surface-900 hover:text-primary-600 transition-colors"
-                    >
-                      {decision.title}
-                    </Link>
-                    {decision.rationale && (
-                      <p className="mt-1 text-sm text-surface-500 line-clamp-2">
-                        {decision.rationale}
-                      </p>
-                    )}
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="text-sm text-surface-600">
-                    {decision.project?.name || (
-                      <span className="text-surface-400">Unknown Project</span>
-                    )}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-surface-100/80 border border-surface-200/50 px-2.5 py-1 text-xs font-medium text-surface-600">
-                    <Calendar className="h-3 w-3 opacity-60" />
-                    {formatDateReadable(decision.created_at)}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-2.5">
-                    <div
-                      className={cn(
-                        'flex h-8 w-8 items-center justify-center rounded-lg',
-                        'text-xs font-semibold',
-                        'bg-gradient-to-br from-primary-500 to-primary-600 text-white',
-                        'shadow-sm shadow-primary-500/20'
-                      )}
-                    >
-                      {decision.decision_maker?.avatar_url ? (
-                        <img
-                          src={decision.decision_maker.avatar_url}
-                          alt=""
-                          className="h-8 w-8 rounded-lg object-cover"
-                        />
-                      ) : (
-                        getInitials(
-                          decision.decision_maker?.full_name ||
-                            decision.decision_maker_name ||
-                            'U'
-                        )
-                      )}
-                    </div>
-                    <span className="text-sm font-medium text-surface-700">
-                      {decision.decision_maker?.full_name ||
-                        decision.decision_maker_name || (
-                          <span className="text-surface-400 font-normal">Unknown</span>
-                        )}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  {decision.source_meeting ? (
-                    <Link
-                      href={`/meetings/${decision.source_meeting.id}`}
-                      className="group/meeting inline-flex items-center gap-2 text-primary-600 hover:text-primary-700 transition-colors"
-                    >
-                      <div className="text-sm">
-                        <div className="font-medium flex items-center gap-1">
-                          {decision.source_meeting.title}
-                          <ExternalLink className="h-3 w-3 opacity-0 group-hover/meeting:opacity-100 transition-opacity" />
-                        </div>
-                        {decision.source_meeting.date && (
-                          <div className="text-surface-500 text-xs">
-                            {formatDateReadable(decision.source_meeting.date)}
-                          </div>
+            {decisions.map((decision, index) => {
+              const isSuperseded = decision.status === 'SUPERSEDED';
+              const isManual = decision.source === 'manual';
+
+              return (
+                <tr
+                  key={decision.id}
+                  className={cn(
+                    'group transition-colors duration-150',
+                    'hover:bg-white/60',
+                    'animate-fade-in',
+                    isSuperseded && 'opacity-60'
+                  )}
+                  style={{ animationDelay: `${index * 30}ms` }}
+                >
+                  {/* Smart ID */}
+                  <td className="px-4 py-4">
+                    <DecisionSmartId smartId={decision.smart_id} size="sm" />
+                  </td>
+
+                  {/* Decision Title & Rationale */}
+                  <td className="px-4 py-4 max-w-md">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/decisions/${decision.id}`}
+                          className={cn(
+                            'font-medium text-surface-900 hover:text-primary-600 transition-colors',
+                            isSuperseded && 'line-through decoration-surface-400'
+                          )}
+                        >
+                          {decision.title}
+                        </Link>
+                        {isManual && (
+                          <span title="Manually created">
+                            <PenLine className="h-3.5 w-3.5 text-surface-400" />
+                          </span>
                         )}
                       </div>
-                    </Link>
-                  ) : (
-                    <span className="text-sm text-surface-400">No meeting</span>
-                  )}
-                </td>
-                <td className="px-6 py-4">
-                  <Badge variant={decision.outcome ? 'success' : 'default'} dot>
-                    {decision.outcome ? 'Implemented' : 'Pending'}
-                  </Badge>
-                </td>
-                <td className="px-4 py-4">
-                  <Link
-                    href={`/decisions/${decision.id}`}
-                    aria-label="View decision details"
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-lg',
-                      'text-surface-300 hover:text-primary-600',
-                      'hover:bg-primary-50/80',
-                      'transition-all duration-200',
-                      'opacity-0 group-hover:opacity-100'
+                      {decision.rationale && !isSuperseded && (
+                        <p className="mt-1 text-sm text-surface-500 line-clamp-1">
+                          {decision.rationale}
+                        </p>
+                      )}
+                      {isSuperseded && decision.superseded_by_id && (
+                        <DecisionSupersededLink
+                          supersededById={decision.superseded_by_id}
+                          supersededBySmartId={decision.superseded_by?.smart_id || null}
+                          className="mt-1"
+                        />
+                      )}
+                    </div>
+                  </td>
+
+                  {/* Category */}
+                  <td className="px-4 py-4">
+                    {decision.category ? (
+                      <DecisionCategoryBadge category={decision.category} size="sm" />
+                    ) : (
+                      <span className="text-sm text-surface-400 italic">—</span>
                     )}
-                  >
-                    <ChevronRight className="h-5 w-5" />
-                  </Link>
-                </td>
-              </tr>
-            ))}
+                  </td>
+
+                  {/* Impact Areas */}
+                  <td className="px-4 py-4">
+                    {decision.impact_areas && decision.impact_areas.length > 0 ? (
+                      <DecisionImpactChips
+                        impactAreas={decision.impact_areas}
+                        size="sm"
+                        maxDisplay={3}
+                      />
+                    ) : (
+                      <span className="text-sm text-surface-400 italic">—</span>
+                    )}
+                  </td>
+
+                  {/* Status */}
+                  <td className="px-4 py-4">
+                    <DecisionStatusBadge status={decision.status} size="sm" />
+                  </td>
+
+                  {/* Decision Maker */}
+                  <td className="px-4 py-4">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={cn(
+                          'flex h-7 w-7 items-center justify-center rounded-lg',
+                          'text-xs font-semibold',
+                          'bg-gradient-to-br from-primary-500 to-primary-600 text-white',
+                          'shadow-sm shadow-primary-500/20'
+                        )}
+                      >
+                        {decision.decision_maker?.avatar_url ? (
+                          <img
+                            src={decision.decision_maker.avatar_url}
+                            alt=""
+                            className="h-7 w-7 rounded-lg object-cover"
+                          />
+                        ) : (
+                          getInitials(
+                            decision.decision_maker?.full_name ||
+                              decision.decision_maker_name ||
+                              'U'
+                          )
+                        )}
+                      </div>
+                      <span className="text-sm text-surface-700">
+                        {decision.decision_maker?.full_name ||
+                          decision.decision_maker_name || (
+                            <span className="text-surface-400">Unknown</span>
+                          )}
+                      </span>
+                    </div>
+                  </td>
+
+                  {/* Date */}
+                  <td className="px-4 py-4">
+                    <span className="inline-flex items-center gap-1.5 text-xs text-surface-600">
+                      <Calendar className="h-3 w-3 opacity-60" />
+                      {formatDateReadable(decision.decision_date || decision.created_at)}
+                    </span>
+                  </td>
+
+                  {/* Action */}
+                  <td className="px-4 py-4">
+                    <Link
+                      href={`/decisions/${decision.id}`}
+                      aria-label="View decision details"
+                      className={cn(
+                        'flex h-8 w-8 items-center justify-center rounded-lg',
+                        'text-surface-300 hover:text-primary-600',
+                        'hover:bg-primary-50/80',
+                        'transition-all duration-200',
+                        'opacity-0 group-hover:opacity-100'
+                      )}
+                    >
+                      <ChevronRight className="h-5 w-5" />
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
     </div>
   );
 }
-
-
-
-
-

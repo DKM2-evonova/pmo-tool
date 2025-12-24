@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
-type SortField = 'date' | 'title' | 'decisionMaker';
+type SortField = 'date' | 'title' | 'decisionMaker' | 'id';
 type SortDirection = 'asc' | 'desc';
 
 interface DecisionSortProps {
@@ -78,6 +78,11 @@ export function DecisionSort({ currentSort }: DecisionSortProps) {
     </div>
   );
 }
+
+
+
+
+
 
 
 

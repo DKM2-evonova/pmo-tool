@@ -415,9 +415,17 @@ Automatically imports meeting transcripts from Google Drive's "Meet Recordings" 
 
 ### Decision Log
 
-- Comprehensive decision tracking across all meeting categories
-- Captures decision makers, outcomes, and implementation status
-- Filtering and sorting by project, decision maker, and status
+The Decision Log is designed to handle 100+ decisions across hybrid projects (Software Development + Business Process Transformation):
+
+- **Smart IDs**: Auto-generated category-prefixed identifiers (e.g., TECH-001, PROC-042, GOV-015)
+- **6 Categories**: Process & Operating Model, Technology & Systems, Data & Reporting, People & Change Management, Governance & Compliance, Strategy & Commercial
+- **5 Impact Areas**: Scope, Cost/Budget, Time/Schedule, Risk, Customer Experience (multi-select)
+- **Status Lifecycle**: Proposed → Approved / Rejected / Superseded
+- **Superseded Workflow**: Link replacement decisions with visual strikethrough and navigation
+- **Manual Entry**: Create decisions directly without a meeting source
+- **Faceted Filtering**: Sidebar with category, impact, and status checkboxes with real-time counts
+- **Saved Views**: Pre-configured filter presets (Technical, Business Process, Governance, Active, Pending)
+- **LLM Auto-Classification**: AI automatically assigns category and impact areas during meeting processing
 - Evidence-based decisions with transcript citations
 
 ### Risk Register

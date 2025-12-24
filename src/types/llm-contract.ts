@@ -105,12 +105,42 @@ const ActionItemSchema = z.object({
   evidence: z.array(EvidenceSchema).min(1),
 });
 
+// Decision Category enum
+const DecisionCategoryEnum = z.enum([
+  'PROCESS_OP_MODEL',
+  'TECHNOLOGY_SYSTEMS',
+  'DATA_REPORTING',
+  'PEOPLE_CHANGE_MGMT',
+  'GOVERNANCE_COMPLIANCE',
+  'STRATEGY_COMMERCIAL',
+]);
+
+// Decision Impact Area enum
+const DecisionImpactAreaEnum = z.enum([
+  'SCOPE',
+  'COST_BUDGET',
+  'TIME_SCHEDULE',
+  'RISK',
+  'CUSTOMER_EXP',
+]);
+
+// Decision Status enum
+const DecisionStatusEnum = z.enum([
+  'PROPOSED',
+  'APPROVED',
+  'REJECTED',
+]);
+
 // Decision schema
 const DecisionSchema = z.object({
   operation: z.enum(['create', 'update']),
+  external_id: z.string().nullable().optional(),
   title: z.string(),
   rationale: z.string(),
   impact: z.string(),
+  category: DecisionCategoryEnum,
+  impact_areas: z.array(DecisionImpactAreaEnum).min(1),
+  status: DecisionStatusEnum,
   decision_maker: OwnerSchema,
   outcome: z.string(),
   evidence: z.array(EvidenceSchema).min(1),

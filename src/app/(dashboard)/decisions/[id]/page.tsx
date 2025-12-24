@@ -1,8 +1,22 @@
 import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, FileText, Calendar, User, ExternalLink } from 'lucide-react';
+import {
+  ArrowLeft,
+  FileText,
+  Calendar,
+  User,
+  ExternalLink,
+  AlertCircle,
+  PenLine,
+} from 'lucide-react';
 import { formatDateReadable, getInitials } from '@/lib/utils';
+import { DecisionSmartId } from '@/components/decisions/decision-smart-id';
+import { DecisionCategoryBadge } from '@/components/decisions/decision-category-badge';
+import { DecisionStatusBadge } from '@/components/decisions/decision-status-badge';
+import { DecisionImpactChips } from '@/components/decisions/decision-impact-chips';
+import { DecisionSupersededLink } from '@/components/decisions/decision-superseded-link';
+import type { DecisionCategory, DecisionImpactArea, DecisionStatus } from '@/types/enums';
 
 interface DecisionPageProps {
   params: Promise<{ id: string }>;
@@ -14,7 +28,9 @@ export default async function DecisionPage({ params }: DecisionPageProps) {
   const supabase = await createClient();
 
   // Check authentication
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) {
     notFound();
   }
@@ -22,12 +38,15 @@ export default async function DecisionPage({ params }: DecisionPageProps) {
   // Get decision with related data
   const { data: decision } = await supabase
     .from('decisions')
-    .select(`
+    .select(
+      `
       *,
       decision_maker:profiles!decisions_decision_maker_user_id_fkey(id, full_name, email, avatar_url),
       project:projects(id, name),
-      source_meeting:meetings(id, title, date)
-    `)
+      source_meeting:meetings(id, title, date),
+      superseded_by:decisions!decisions_superseded_by_id_fkey(id, smart_id, title)
+    `
+    )
     .eq('id', id)
     .single();
 
@@ -47,10 +66,18 @@ export default async function DecisionPage({ params }: DecisionPageProps) {
     notFound();
   }
 
+  const isSuperseded = decision.status === 'SUPERSEDED';
+  const isManual = decision.source === 'manual';
+  const supersededBy = decision.superseded_by as {
+    id: string;
+    smart_id: string | null;
+    title: string;
+  } | null;
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center justify-between">
         <Link
           href="/decisions"
           className="flex items-center gap-2 text-surface-600 hover:text-surface-900"
@@ -60,20 +87,75 @@ export default async function DecisionPage({ params }: DecisionPageProps) {
         </Link>
       </div>
 
-      {/* Decision Details */}
-      <div className="card">
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 text-sm text-surface-500 mb-2">
-              <span>{(decision.project as any)?.name || 'Unknown Project'}</span>
-              <span>·</span>
-              <span>{formatDateReadable(decision.created_at)}</span>
+      {/* Superseded Banner */}
+      {isSuperseded && supersededBy && (
+        <div className="glass-panel bg-surface-50/80 border-surface-300/60 p-4">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-surface-500" />
+            <div>
+              <p className="font-medium text-surface-700">
+                This decision has been superseded
+              </p>
+              <DecisionSupersededLink
+                supersededById={supersededBy.id}
+                supersededBySmartId={supersededBy.smart_id}
+              />
             </div>
-            <h1 className="text-2xl font-bold text-surface-900 mb-4">
-              {decision.title}
-            </h1>
           </div>
         </div>
+      )}
+
+      {/* Decision Details */}
+      <div className={`glass-panel ${isSuperseded ? 'opacity-75' : ''}`}>
+        {/* Top Section: ID, Category, Status */}
+        <div className="flex flex-wrap items-center gap-4 mb-6">
+          <DecisionSmartId smartId={decision.smart_id} size="lg" />
+          {decision.category && (
+            <DecisionCategoryBadge
+              category={decision.category as DecisionCategory}
+              showLabel
+            />
+          )}
+          <DecisionStatusBadge status={decision.status as DecisionStatus} />
+          {isManual && (
+            <span className="inline-flex items-center gap-1.5 text-sm text-surface-500">
+              <PenLine className="h-4 w-4" />
+              Manually created
+            </span>
+          )}
+        </div>
+
+        {/* Title and Project */}
+        <div className="mb-6">
+          <div className="flex items-center gap-2 text-sm text-surface-500 mb-2">
+            <span>{(decision.project as any)?.name || 'Unknown Project'}</span>
+            <span>·</span>
+            <span>
+              {formatDateReadable(decision.decision_date || decision.created_at)}
+            </span>
+          </div>
+          <h1
+            className={`text-2xl font-bold text-surface-900 ${
+              isSuperseded ? 'line-through decoration-surface-400' : ''
+            }`}
+          >
+            {decision.title}
+          </h1>
+        </div>
+
+        {/* Impact Areas */}
+        {decision.impact_areas &&
+          (decision.impact_areas as DecisionImpactArea[]).length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold text-surface-500 uppercase tracking-wider mb-2">
+                Impact Areas
+              </h3>
+              <DecisionImpactChips
+                impactAreas={decision.impact_areas as DecisionImpactArea[]}
+                size="md"
+              />
+            </div>
+          )}
 
         <div className="grid gap-6 md:grid-cols-2">
           {/* Left Column */}
@@ -84,7 +166,9 @@ export default async function DecisionPage({ params }: DecisionPageProps) {
                   <FileText className="h-5 w-5" />
                   Rationale
                 </h3>
-                <p className="text-surface-700">{decision.rationale}</p>
+                <p className="text-surface-700 whitespace-pre-wrap">
+                  {decision.rationale}
+                </p>
               </div>
             )}
 
@@ -94,7 +178,9 @@ export default async function DecisionPage({ params }: DecisionPageProps) {
                   Outcome
                 </h3>
                 <div className="rounded-lg bg-success-50 p-4">
-                  <p className="text-success-600">{decision.outcome}</p>
+                  <p className="text-success-700 whitespace-pre-wrap">
+                    {decision.outcome}
+                  </p>
                 </div>
               </div>
             )}
@@ -102,9 +188,11 @@ export default async function DecisionPage({ params }: DecisionPageProps) {
             {decision.impact && (
               <div>
                 <h3 className="text-lg font-semibold text-surface-900 mb-2">
-                  Impact
+                  Impact Description
                 </h3>
-                <p className="text-surface-700">{decision.impact}</p>
+                <p className="text-surface-700 whitespace-pre-wrap">
+                  {decision.impact}
+                </p>
               </div>
             )}
           </div>
@@ -173,24 +261,34 @@ export default async function DecisionPage({ params }: DecisionPageProps) {
                 </Link>
               </div>
             )}
+
+            {/* Metadata */}
+            <div className="pt-4 border-t border-surface-200/60">
+              <h3 className="text-sm font-semibold text-surface-500 uppercase tracking-wider mb-3">
+                Metadata
+              </h3>
+              <dl className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-surface-500">Created</dt>
+                  <dd className="text-surface-700">
+                    {formatDateReadable(decision.created_at)}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-surface-500">Last Updated</dt>
+                  <dd className="text-surface-700">
+                    {formatDateReadable(decision.updated_at)}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-surface-500">Source</dt>
+                  <dd className="text-surface-700 capitalize">{decision.source}</dd>
+                </div>
+              </dl>
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
