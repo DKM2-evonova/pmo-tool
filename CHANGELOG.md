@@ -4,6 +4,17 @@ All notable changes to the PMO Tool are documented here.
 
 ---
 
+## [1.2.1] - December 24, 2025
+
+### Improved
+- **Meeting Type Selector UI**: Redesigned category selection during meeting upload
+  - Clear "Best for" taglines help users quickly identify the right type
+  - Unique processing feature highlighted for each category (e.g., fishbone for Remediation, tone analysis for Alignment)
+  - Expandable "More details" section with description and real-world examples
+  - Color-coded selection states matching each category's theme
+
+---
+
 ## [1.2.0] - December 24, 2025
 
 ### Added
@@ -126,6 +137,7 @@ All notable changes to the PMO Tool are documented here.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 1.2.1 | Dec 24, 2025 | Meeting type selector UI improvements |
 | 1.2.0 | Dec 24, 2025 | Decision Log overhaul (Smart IDs, categories, faceted filters) |
 | 1.1.1 | Dec 21, 2025 | Milestones in status reports (dashboard + Excel) |
 | 1.1.0 | Dec 21, 2025 | Code optimization complete, toast system |
