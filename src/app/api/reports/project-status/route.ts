@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch all data in parallel
-    const [actionItemsResult, risksResult, decisionsResult] = await Promise.all([
+    const [actionItemsResult, risksResult, decisionsResult, milestonesResult] = await Promise.all([
       // Action Items: Open + In Progress, sorted by due_date ascending (past due first, nulls last)
       supabase
         .from('action_items')
@@ -124,6 +124,25 @@ export async function GET(request: NextRequest) {
         `)
         .eq('project_id', projectId)
         .order('created_at', { ascending: false }),
+
+      // Milestones: All, sorted by sort_order
+      supabase
+        .from('milestones')
+        .select(`
+          id,
+          name,
+          description,
+          target_date,
+          status,
+          sort_order,
+          predecessor_id,
+          predecessor:predecessor_id (
+            id,
+            name
+          )
+        `)
+        .eq('project_id', projectId)
+        .order('sort_order', { ascending: true }),
     ]);
 
     if (actionItemsResult.error) {
@@ -141,15 +160,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch decisions' }, { status: 500 });
     }
 
-    // Parse milestones (stored as JSON in database)
-    const milestones = Array.isArray(project.milestones) ? project.milestones : [];
+    if (milestonesResult.error) {
+      log.error('Error fetching milestones', { error: milestonesResult.error.message });
+      return NextResponse.json({ error: 'Failed to fetch milestones' }, { status: 500 });
+    }
 
     log.info('Project status report data fetched', {
       projectId,
       actionItemsCount: actionItemsResult.data?.length || 0,
       risksCount: risksResult.data?.length || 0,
       decisionsCount: decisionsResult.data?.length || 0,
-      milestonesCount: milestones.length,
+      milestonesCount: milestonesResult.data?.length || 0,
     });
 
     return NextResponse.json({
@@ -157,7 +178,7 @@ export async function GET(request: NextRequest) {
       actionItems: actionItemsResult.data || [],
       risks: risksResult.data || [],
       decisions: decisionsResult.data || [],
-      milestones,
+      milestones: milestonesResult.data || [],
     });
   } catch (error) {
     log.error('Unexpected error in project status report', { error: error instanceof Error ? error.message : 'Unknown error' });

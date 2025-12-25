@@ -6,14 +6,14 @@ import { generateProjectStatusPDF } from '@/lib/export/project-status-report';
 import { generateProjectStatusExcel } from '@/lib/export/project-status-excel';
 import { useToast } from '@/components/ui/toast';
 import { clientLog } from '@/lib/client-logger';
-import type { ActionItemWithOwner, RiskWithOwner, DecisionWithMaker, Milestone } from '@/types/database';
+import type { ActionItemWithOwner, RiskWithOwner, DecisionWithMaker, MilestoneWithPredecessor } from '@/types/database';
 
 interface StatusReportExportProps {
   projectName: string;
   actionItems: ActionItemWithOwner[];
   risks: RiskWithOwner[];
   decisions: DecisionWithMaker[];
-  milestones: Milestone[];
+  milestones: MilestoneWithPredecessor[];
   disabled?: boolean;
 }
 

@@ -9,7 +9,7 @@ import { RisksLog } from '@/components/reports/risks-log';
 import { DecisionsLog } from '@/components/reports/decisions-log';
 import { MilestonesLog } from '@/components/reports/milestones-log';
 import { StatusReportExport } from '@/components/reports/status-report-export';
-import type { ActionItemWithOwner, RiskWithOwner, DecisionWithMaker, Milestone } from '@/types/database';
+import type { ActionItemWithOwner, RiskWithOwner, DecisionWithMaker, MilestoneWithPredecessor } from '@/types/database';
 
 interface Project {
   id: string;
@@ -25,7 +25,7 @@ interface ReportData {
   actionItems: ActionItemWithOwner[];
   risks: RiskWithOwner[];
   decisions: DecisionWithMaker[];
-  milestones: Milestone[];
+  milestones: MilestoneWithPredecessor[];
 }
 
 type TabType = 'action-items' | 'risks' | 'decisions' | 'milestones';

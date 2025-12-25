@@ -4,6 +4,31 @@ All notable changes to the PMO Tool are documented here.
 
 ---
 
+## [1.3.0] - December 25, 2025
+
+### Added
+- **Milestone Section Overhaul**: Complete redesign with professional project management features
+  - **Database Migration**: Milestones moved from JSONB to proper relational table with RLS policies
+  - **Finish-to-Start Dependencies**: Set predecessor relationships between milestones
+  - **Spreadsheet-Style Editing**: Bulk edit milestones inline with drag-to-reorder
+  - **Excel Template Import/Export**: Download template, edit in Excel/Sheets, re-upload
+  - **Gantt Chart Visualization**: SVG-based timeline with dependency arrows and today line
+  - **Circular Dependency Prevention**: Database trigger prevents invalid dependency chains
+  - **View Switcher**: Toggle between List, Edit, and Timeline views
+
+### Changed
+- Project page now fetches milestones from dedicated table instead of JSONB column
+- Reports now display milestone description and dependencies
+- Project status Excel export includes new milestone columns (Description, Depends On)
+
+### Technical
+- New migration: `00036_create_milestones_table.sql`
+- New components: `milestone-spreadsheet.tsx`, `milestone-gantt.tsx`
+- New libraries: `milestone-template.ts`, `milestone-parser.ts`, `milestone-dependencies.ts`
+- New API endpoints: `/milestones/template`, `/milestones/import`
+
+---
+
 ## [1.2.2] - December 25, 2025
 
 ### Added

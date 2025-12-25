@@ -1,11 +1,11 @@
 'use client';
 
 import { Flag } from 'lucide-react';
-import type { Milestone } from '@/types/database';
+import type { MilestoneWithPredecessor } from '@/types/database';
 import { cn } from '@/lib/utils';
 
 interface MilestonesLogProps {
-  items: Milestone[];
+  items: MilestoneWithPredecessor[];
 }
 
 function formatDate(dateString: string | null): string {
@@ -46,17 +46,12 @@ export function MilestonesLog({ items }: MilestonesLogProps) {
     );
   }
 
-  // Sort milestones: by target_date (ascending), nulls last
-  const sortedItems = [...items].sort((a, b) => {
-    if (!a.target_date && !b.target_date) return 0;
-    if (!a.target_date) return 1;
-    if (!b.target_date) return -1;
-    return new Date(a.target_date).getTime() - new Date(b.target_date).getTime();
-  });
+  // Sort milestones: by sort_order (preserves user-defined order)
+  const sortedItems = [...items].sort((a, b) => a.sort_order - b.sort_order);
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[600px]">
+      <table className="w-full min-w-[700px]">
         <thead>
           <tr className="border-b border-surface-200 bg-surface-50">
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-surface-600">
@@ -67,6 +62,9 @@ export function MilestonesLog({ items }: MilestonesLogProps) {
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-surface-600">
               Target Date
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-surface-600">
+              Depends On
             </th>
           </tr>
         </thead>
@@ -82,16 +80,23 @@ export function MilestonesLog({ items }: MilestonesLogProps) {
                 )}
               >
                 <td className="px-4 py-3">
-                  <span
-                    className={cn(
-                      'font-medium',
-                      item.status === 'Complete'
-                        ? 'text-surface-400 line-through'
-                        : 'text-surface-900'
+                  <div>
+                    <span
+                      className={cn(
+                        'font-medium',
+                        item.status === 'Complete'
+                          ? 'text-surface-400 line-through'
+                          : 'text-surface-900'
+                      )}
+                    >
+                      {item.name}
+                    </span>
+                    {item.description && (
+                      <p className="mt-1 text-xs text-surface-500 line-clamp-2">
+                        {item.description}
+                      </p>
                     )}
-                  >
-                    {item.name}
-                  </span>
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <span
@@ -114,6 +119,15 @@ export function MilestonesLog({ items }: MilestonesLogProps) {
                   </span>
                   {overdue && (
                     <span className="ml-2 text-xs text-danger-500">Overdue</span>
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  {item.predecessor ? (
+                    <span className="text-sm text-surface-600">
+                      {item.predecessor.name}
+                    </span>
+                  ) : (
+                    <span className="text-sm text-surface-400">—</span>
                   )}
                 </td>
               </tr>

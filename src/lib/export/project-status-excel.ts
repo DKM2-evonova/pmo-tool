@@ -10,7 +10,7 @@
  */
 
 import ExcelJS from 'exceljs';
-import type { ActionItemWithOwner, RiskWithOwner, DecisionWithMaker, Milestone } from '@/types/database';
+import type { ActionItemWithOwner, RiskWithOwner, DecisionWithMaker, MilestoneWithPredecessor } from '@/types/database';
 
 export interface ProjectStatusExportData {
   projectName: string;
@@ -18,7 +18,7 @@ export interface ProjectStatusExportData {
   actionItems: ActionItemWithOwner[];
   risks: RiskWithOwner[];
   decisions: DecisionWithMaker[];
-  milestones: Milestone[];
+  milestones: MilestoneWithPredecessor[];
 }
 
 // Color palette (ARGB format for ExcelJS)
@@ -595,46 +595,45 @@ export async function generateProjectStatusExcel(
     views: [{ state: 'frozen', xSplit: 0, ySplit: HEADER_ROW }],
   });
 
-  const milestoneColumnWidths = [45, 18, 18];
+  const milestoneColumnWidths = [35, 40, 16, 16, 25];
   milestoneSheet.columns = [
     { key: 'name', width: milestoneColumnWidths[0] },
-    { key: 'status', width: milestoneColumnWidths[1] },
-    { key: 'target_date', width: milestoneColumnWidths[2] },
+    { key: 'description', width: milestoneColumnWidths[1] },
+    { key: 'status', width: milestoneColumnWidths[2] },
+    { key: 'target_date', width: milestoneColumnWidths[3] },
+    { key: 'depends_on', width: milestoneColumnWidths[4] },
   ];
 
-  // Sort milestones by target_date (ascending), nulls last
-  const sortedMilestones = [...(data.milestones || [])].sort((a, b) => {
-    if (!a.target_date && !b.target_date) return 0;
-    if (!a.target_date) return 1;
-    if (!b.target_date) return -1;
-    return new Date(a.target_date).getTime() - new Date(b.target_date).getTime();
-  });
+  // Sort milestones by sort_order (user-defined order)
+  const sortedMilestones = [...(data.milestones || [])].sort((a, b) => a.sort_order - b.sort_order);
 
-  addReportHeader(milestoneSheet, 'Milestones', data.projectName, data.generatedAt, sortedMilestones.length, 3);
+  addReportHeader(milestoneSheet, 'Milestones', data.projectName, data.generatedAt, sortedMilestones.length, 5);
 
-  const milestoneHeaders = ['Milestone', 'Status', 'Target Date'];
+  const milestoneHeaders = ['Milestone', 'Description', 'Status', 'Target Date', 'Depends On'];
   const milestoneHeaderRow = milestoneSheet.getRow(HEADER_ROW);
   milestoneHeaders.forEach((header, index) => {
     milestoneHeaderRow.getCell(index + 1).value = header;
   });
-  styleColumnHeaders(milestoneSheet, HEADER_ROW, 3);
+  styleColumnHeaders(milestoneSheet, HEADER_ROW, 5);
 
   let milestoneRowNum = DATA_START_ROW;
   sortedMilestones.forEach((item, index) => {
     const row = milestoneSheet.getRow(milestoneRowNum);
 
     row.getCell(1).value = item.name;
-    row.getCell(2).value = item.status;
-    row.getCell(3).value = item.target_date ? new Date(item.target_date) : null;
+    row.getCell(2).value = item.description || '';
+    row.getCell(3).value = item.status;
+    row.getCell(4).value = item.target_date ? new Date(item.target_date) : null;
+    row.getCell(5).value = item.predecessor?.name || '';
 
-    const rowHeight = calculateRowHeight([item.name], milestoneColumnWidths);
+    const rowHeight = calculateRowHeight([item.name, item.description], milestoneColumnWidths);
     row.height = rowHeight;
 
-    // Style row (columns 2, 3 are centered - status, target date)
-    styleDataRow(row, index, 3, [2, 3]);
+    // Style row (columns 3, 4 are centered - status, target date)
+    styleDataRow(row, index, 5, [3, 4]);
 
     // Style status cell based on status
-    const statusCell = row.getCell(2);
+    const statusCell = row.getCell(3);
     if (item.status === 'Complete') {
       statusCell.font = { color: { argb: COLORS.success }, bold: true, size: 10 };
       statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.successLight } };
@@ -659,7 +658,7 @@ export async function generateProjectStatusExcel(
       today.setHours(0, 0, 0, 0);
       targetDate.setHours(0, 0, 0, 0);
       if (targetDate < today) {
-        const targetDateCell = row.getCell(3);
+        const targetDateCell = row.getCell(4);
         targetDateCell.font = { color: { argb: COLORS.danger }, bold: true, size: 10 };
         targetDateCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.dangerLight } };
       }
@@ -668,7 +667,7 @@ export async function generateProjectStatusExcel(
     milestoneRowNum++;
   });
 
-  milestoneSheet.getColumn(3).numFmt = 'mmm d, yyyy';
+  milestoneSheet.getColumn(4).numFmt = 'mmm d, yyyy';
 
   // Summary by status
   const milestoneCompleteCount = sortedMilestones.filter(m => m.status === 'Complete').length;
@@ -676,13 +675,13 @@ export async function generateProjectStatusExcel(
   const milestoneBehindScheduleCount = sortedMilestones.filter(m => m.status === 'Behind Schedule').length;
   const milestoneNotStartedCount = sortedMilestones.filter(m => m.status === 'Not Started').length;
 
-  addSummaryFooter(milestoneSheet, sortedMilestones.length, 3,
+  addSummaryFooter(milestoneSheet, sortedMilestones.length, 5,
     `Complete: ${milestoneCompleteCount} | In Progress: ${milestoneInProgressCount} | Behind Schedule: ${milestoneBehindScheduleCount} | Not Started: ${milestoneNotStartedCount}`);
 
   if (sortedMilestones.length > 0) {
     milestoneSheet.autoFilter = {
       from: { row: HEADER_ROW, column: 1 },
-      to: { row: HEADER_ROW + sortedMilestones.length, column: 3 },
+      to: { row: HEADER_ROW + sortedMilestones.length, column: 5 },
     };
   }
 

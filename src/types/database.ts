@@ -40,11 +40,36 @@ export interface Project extends BaseEntity {
   milestones: Milestone[] | null;
 }
 
+// Legacy Milestone interface (for JSONB compatibility during migration)
 export interface Milestone {
   id: string;
   name: string;
   target_date: string | null;
   status: MilestoneStatus;
+}
+
+// Milestone from relational table (new schema with dependencies)
+export interface MilestoneRecord extends BaseEntity {
+  project_id: string;
+  name: string;
+  description: string | null;
+  target_date: string | null;
+  status: MilestoneStatus;
+  sort_order: number;
+  predecessor_id: string | null;
+}
+
+// Milestone with predecessor details (for display)
+export interface MilestoneWithPredecessor extends MilestoneRecord {
+  predecessor?: Pick<MilestoneRecord, 'id' | 'name' | 'target_date' | 'status'> | null;
+}
+
+// Milestone for spreadsheet editing (includes UI state)
+export interface EditableMilestone extends MilestoneRecord {
+  _isNew?: boolean;
+  _isDeleted?: boolean;
+  _isDirty?: boolean;
+  _error?: string | null;
 }
 
 // Project membership

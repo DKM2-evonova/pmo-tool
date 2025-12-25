@@ -12,29 +12,24 @@ import {
 } from 'lucide-react';
 import { formatDateReadable } from '@/lib/utils';
 import { MilestoneList } from '@/components/projects/milestone-list';
-import { MilestoneStatus } from '@/types/enums';
-import type { Milestone } from '@/types/database';
+import type { MilestoneRecord, MilestoneWithPredecessor } from '@/types/database';
+
+// Transform Supabase result to proper type (predecessor comes as array from join)
+type RawMilestoneFromDB = Omit<MilestoneWithPredecessor, 'predecessor'> & {
+  predecessor: Array<Pick<MilestoneRecord, 'id' | 'name' | 'target_date' | 'status'>> | null;
+};
+
+function transformMilestones(raw: RawMilestoneFromDB[]): MilestoneWithPredecessor[] {
+  return raw.map((m) => ({
+    ...m,
+    predecessor: Array.isArray(m.predecessor) && m.predecessor.length > 0
+      ? m.predecessor[0]
+      : null,
+  }));
+}
 
 interface ProjectPageProps {
   params: Promise<{ projectId: string }>;
-}
-
-// Normalize milestones to handle migration from old 'completed' boolean to new 'status' field
-function normalizeMilestones(milestones: unknown): Milestone[] {
-  if (!milestones || !Array.isArray(milestones)) {
-    return [];
-  }
-  return milestones.map((m: Record<string, unknown>) => ({
-    id: String(m.id || ''),
-    name: String(m.name || ''),
-    target_date: m.target_date ? String(m.target_date) : null,
-    // Handle both old 'completed' boolean and new 'status' field
-    status: m.status
-      ? (m.status as Milestone['status'])
-      : m.completed
-        ? MilestoneStatus.Complete
-        : MilestoneStatus.NotStarted,
-  }));
 }
 
 export default async function ProjectPage({ params }: ProjectPageProps) {
@@ -52,8 +47,8 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     notFound();
   }
 
-  // Get project stats
-  const [actionItems, decisions, risks, meetings, members] = await Promise.all([
+  // Get project stats and milestones
+  const [actionItems, decisions, risks, meetings, members, milestones] = await Promise.all([
     supabase
       .from('action_items')
       .select('id, status')
@@ -73,6 +68,28 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       .from('project_members')
       .select('user_id, project_role, profile:profiles(full_name, email, avatar_url)')
       .eq('project_id', projectId),
+    supabase
+      .from('milestones')
+      .select(`
+        id,
+        project_id,
+        name,
+        description,
+        target_date,
+        status,
+        sort_order,
+        predecessor_id,
+        created_at,
+        updated_at,
+        predecessor:predecessor_id (
+          id,
+          name,
+          target_date,
+          status
+        )
+      `)
+      .eq('project_id', projectId)
+      .order('sort_order', { ascending: true }),
   ]);
 
   const openActionItems =
@@ -284,7 +301,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       {/* Milestones */}
       <MilestoneList
         projectId={projectId}
-        milestones={normalizeMilestones(project.milestones)}
+        milestones={transformMilestones((milestones.data || []) as RawMilestoneFromDB[])}
       />
     </div>
   );
