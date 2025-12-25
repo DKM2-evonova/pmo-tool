@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { fetchCalendarEvents, fetchRecentMeetings } from '@/lib/google/calendar-client';
+import { loggers } from '@/lib/logger';
+
+const log = loggers.calendar;
 
 /**
  * GET /api/google/calendar/events
@@ -94,7 +97,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Error fetching calendar events:', error);
+    log.error('Error fetching calendar events', { error: error instanceof Error ? error.message : 'Unknown error' });
 
     // Handle specific error cases
     if (error instanceof Error) {

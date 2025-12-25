@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import { Search, MoreVertical, Shield, User, Users, XCircle } from 'lucide-react';
 import { cn, getInitials, formatDateReadable } from '@/lib/utils';
+import { clientLog } from '@/lib/client-logger';
 import type { Profile } from '@/types/database';
 import type { GlobalRole } from '@/types/enums';
 
@@ -73,7 +74,7 @@ export function UserManagement({ users }: UserManagementProps) {
       router.refresh();
       setSelectedUser(null);
     } catch (err) {
-      console.error('Error updating role:', err);
+      clientLog.error('Error updating role', { error: err instanceof Error ? err.message : 'Unknown error' });
       setError('Failed to update user role. Please try again.');
     } finally {
       setIsUpdating(false);

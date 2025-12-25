@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { findMeetRecordingsFolder } from '@/lib/google/drive-client';
 import { isDriveConnected } from '@/lib/google/drive-oauth';
+import { loggers } from '@/lib/logger';
+
+const log = loggers.drive;
 
 /**
  * GET /api/google/drive/folders/meet-recordings
@@ -54,7 +57,7 @@ export async function GET() {
       alreadyWatched: !!existing,
     });
   } catch (error) {
-    console.error('Error finding Meet Recordings folder:', error);
+    log.error('Error finding Meet Recordings folder', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: 'Failed to search for folder' },
       { status: 500 }

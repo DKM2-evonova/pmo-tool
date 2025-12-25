@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Button, Input } from '@/components/ui';
 import { CheckCircle, XCircle } from 'lucide-react';
 import { getInitials } from '@/lib/utils';
+import { clientLog } from '@/lib/client-logger';
 import type { Profile } from '@/types/database';
 
 interface ProfileFormProps {
@@ -37,7 +38,7 @@ export function ProfileForm({ profile }: ProfileFormProps) {
       router.refresh();
       setMessage({ type: 'success', text: 'Profile updated successfully' });
     } catch (error) {
-      console.error('Error updating profile:', error);
+      clientLog.error('Error updating profile', { error: error instanceof Error ? error.message : 'Unknown error' });
       setMessage({ type: 'error', text: 'Failed to update profile' });
     } finally {
       setIsSubmitting(false);

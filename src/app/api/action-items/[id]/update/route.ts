@@ -102,60 +102,34 @@ export async function POST(
     if (content) {
       log.debug('Adding status update for action item', { actionItemId: id });
 
-      // Use already-fetched userProfile instead of making another query
-      log.debug('User profile retrieved', { userId: user.id, hasProfile: !!userProfile });
+      const updateId = crypto.randomUUID();
+      const createdByName = userProfile?.full_name || 'Unknown';
 
-      // Get current action item
-      const { data: actionItem, error: fetchError } = await serviceSupabase
-        .from('action_items')
-        .select('updates')
-        .eq('id', id)
-        .single();
-
-      log.debug('Action item fetch result', { actionItemId: id, hasData: !!actionItem, hasError: !!fetchError });
-
-      if (fetchError || !actionItem) {
-        log.warn('Action item not found for status update', { actionItemId: id, error: fetchError?.message });
-        return NextResponse.json({ error: 'Action item not found' }, { status: 404 });
-      }
-
-      // Create the update
-      const update = {
-        id: crypto.randomUUID(),
-        content: content.trim(),
-        created_at: new Date().toISOString(),
-        created_by_user_id: user.id,
-        created_by_name: userProfile?.full_name || 'Unknown',
-      };
-
-      // Update the action item - handle both TEXT (JSON string) and JSONB formats
-      let currentUpdates: StatusUpdate[] = [];
-      if (actionItem.updates) {
-        if (Array.isArray(actionItem.updates)) {
-          // JSONB format - already parsed
-          currentUpdates = actionItem.updates as StatusUpdate[];
-        } else if (typeof actionItem.updates === 'string') {
-          // TEXT format - needs parsing
-          try {
-            const parsedUpdates = JSON.parse(actionItem.updates);
-            currentUpdates = Array.isArray(parsedUpdates) ? parsedUpdates : [];
-          } catch (parseError) {
-            log.warn('Failed to parse action item updates', { actionItemId: id, error: parseError instanceof Error ? parseError.message : 'Parse error' });
-            currentUpdates = [];
-          }
+      // Use atomic database function to prevent race conditions
+      const { data: updatedUpdates, error: updateError } = await serviceSupabase.rpc(
+        'append_action_item_update',
+        {
+          p_action_item_id: id,
+          p_update_id: updateId,
+          p_content: content.trim(),
+          p_created_by_user_id: user.id,
+          p_created_by_name: createdByName,
         }
-      }
-      const updatedUpdates = [...currentUpdates, update];
-
-      const { error: updateError } = await serviceSupabase
-        .from('action_items')
-        .update({ updates: JSON.stringify(updatedUpdates) })
-        .eq('id', id);
+      );
 
       if (updateError) {
         log.error('Failed to add status update', { actionItemId: id, error: updateError.message });
+
+        // Check if it's a "not found" error
+        if (updateError.message.includes('not found')) {
+          return NextResponse.json({ error: 'Action item not found' }, { status: 404 });
+        }
         return NextResponse.json({ error: 'Failed to add status update' }, { status: 500 });
       }
+
+      // Extract the newly added update from the result
+      const updates = updatedUpdates as StatusUpdate[];
+      const update = updates[updates.length - 1];
 
       return NextResponse.json({ success: true, update });
     }

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { formatDateReadable, isOverdue, getInitials, cn } from '@/lib/utils';
 import { AlertCircle, GripVertical, Calendar, ArrowRight, XCircle } from 'lucide-react';
+import { clientLog } from '@/lib/client-logger';
 import type { ActionItemWithOwner } from '@/types/database';
 import type { EntityStatus } from '@/types/enums';
 
@@ -92,7 +93,7 @@ export function KanbanBoard({ actionItems }: KanbanBoardProps) {
 
       if (updateError) throw updateError;
     } catch (err) {
-      console.error('Failed to update status:', err);
+      clientLog.error('Failed to update status', { error: err instanceof Error ? err.message : 'Unknown error' });
       setItems((prev) =>
         prev.map((ai) =>
           ai.id === itemId ? { ...ai, status: previousStatus } : ai

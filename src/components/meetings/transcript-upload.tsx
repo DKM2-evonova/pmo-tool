@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { Upload, FileText, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { clientLog } from '@/lib/client-logger';
 
 export interface UploadedFileInfo {
   file: File;
@@ -104,7 +105,7 @@ export function TranscriptUpload({ value, onChange, onFileUploaded }: Transcript
         setError('Unsupported file type. Please use TXT, VTT, DOCX, or PDF.');
       }
     } catch (err) {
-      console.error('Error processing file:', err);
+      clientLog.error('Error processing file', { error: err instanceof Error ? err.message : 'Unknown error' });
       setCurrentFile(null);
       setError('Failed to process file. Please try again or paste text.');
     } finally {
@@ -127,8 +128,7 @@ export function TranscriptUpload({ value, onChange, onFileUploaded }: Transcript
       if (!response.ok) {
         // If processing failed, offer debug information
         if (result.error && result.error.includes('Failed to extract text from DOCX file')) {
-          console.log('DOCX processing failed. Debug information available at /api/files/debug');
-          // Could add a debug button here in the future
+          clientLog.debug('DOCX processing failed. Debug information available at /api/files/debug');
         }
         throw new Error(result.error || 'Failed to process file');
       }
@@ -164,7 +164,7 @@ export function TranscriptUpload({ value, onChange, onFileUploaded }: Transcript
         size: file.size,
       });
     } catch (err) {
-      console.error('Server processing error:', err);
+      clientLog.error('Server processing error', { error: err instanceof Error ? err.message : 'Unknown error' });
       setCurrentFile(null);
       setError(err instanceof Error ? err.message : 'Failed to process file on server');
     }
@@ -216,7 +216,7 @@ export function TranscriptUpload({ value, onChange, onFileUploaded }: Transcript
       setDebugInfo(result);
       setShowDebug(true);
     } catch (err) {
-      console.error('Debug failed:', err);
+      clientLog.error('Debug failed', { error: err instanceof Error ? err.message : 'Unknown error' });
       setError('Failed to debug file');
     } finally {
       setIsProcessing(false);

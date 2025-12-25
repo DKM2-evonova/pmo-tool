@@ -21,3 +21,11 @@ CREATE INDEX idx_risks_updates ON risks USING gin(updates);
 
 
 
+
+
+
+
+
+
+
+

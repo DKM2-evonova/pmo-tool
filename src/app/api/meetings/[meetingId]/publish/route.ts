@@ -13,31 +13,6 @@ import type {
 const log = loggers.publish;
 
 /**
- * Evidence record for batch insertion
- */
-interface EvidenceRecord {
-  entity_type: 'action_item' | 'decision' | 'risk';
-  entity_id: string;
-  meeting_id: string;
-  quote: string;
-  speaker: string | null;
-  timestamp: string | null;
-}
-
-/**
- * Audit log record for batch insertion
- */
-interface AuditRecord {
-  user_id: string;
-  action_type: 'create' | 'update' | 'close';
-  entity_type: 'action_item' | 'decision' | 'risk';
-  entity_id: string;
-  project_id: string;
-  before_data: unknown | null;
-  after_data: unknown | null;
-}
-
-/**
  * Creates an AI-generated update comment for action items or risks
  * when they are updated or closed via meeting processing.
  */
@@ -301,26 +276,102 @@ export async function POST(
       acceptedRisks: acceptedRisks.length,
     });
 
-    let actionItemsCreated = 0;
-    let actionItemsUpdated = 0;
-    let actionItemsClosed = 0;
-    let decisionsCreated = 0;
-    let risksCreated = 0;
-    let risksClosed = 0;
     let embeddingFailures = 0;
 
-    // Collect evidence and audit records for batch insertion (PERFORMANCE OPTIMIZATION)
-    const evidenceRecords: EvidenceRecord[] = [];
-    const auditRecords: AuditRecord[] = [];
+    // Collect all data for transactional publish
+    // Using temp_id to correlate new items with their evidence/audit records
+    interface ActionItemData {
+      temp_id: string;
+      operation: string;
+      external_id?: string;
+      project_id: string;
+      title: string;
+      description: string;
+      status: string;
+      owner_user_id: string | null;
+      owner_name: string;
+      owner_email: string | null;
+      due_date: string | null;
+      embedding: number[] | null;
+      source_meeting_id: string;
+      updates_json?: string;
+    }
 
-    // Helper function to queue evidence records
+    interface DecisionData {
+      temp_id: string;
+      operation: string;
+      project_id: string;
+      title: string;
+      rationale: string;
+      impact: string;
+      category: string | null;
+      impact_areas: string[] | null;
+      status: string;
+      decision_maker_user_id: string | null;
+      decision_maker_name: string;
+      decision_maker_email: string | null;
+      outcome: string | null;
+      decision_date: string;
+      embedding: number[] | null;
+      source_meeting_id: string;
+    }
+
+    interface RiskData {
+      temp_id: string;
+      operation: string;
+      external_id?: string;
+      project_id: string;
+      title: string;
+      description: string;
+      probability: string;
+      impact: string;
+      mitigation: string | null;
+      status: string;
+      owner_user_id: string | null;
+      owner_name: string;
+      owner_email: string | null;
+      embedding: number[] | null;
+      source_meeting_id: string;
+      updates_json?: string;
+    }
+
+    interface EvidenceData {
+      temp_id: string;
+      entity_type: 'action_item' | 'decision' | 'risk';
+      entity_id: string; // Will be filled in by transaction for new items
+      meeting_id: string;
+      quote: string;
+      speaker: string | null;
+      timestamp: string | null;
+    }
+
+    interface AuditData {
+      temp_id: string;
+      user_id: string;
+      action_type: 'create' | 'update' | 'close';
+      entity_type: 'action_item' | 'decision' | 'risk';
+      entity_id: string; // Will be filled in by transaction for new items
+      project_id: string;
+      before_data: unknown | null;
+      after_data: unknown | null;
+    }
+
+    const actionItemsData: ActionItemData[] = [];
+    const decisionsData: DecisionData[] = [];
+    const risksData: RiskData[] = [];
+    const evidenceData: EvidenceData[] = [];
+    const auditData: AuditData[] = [];
+
+    // Helper to queue evidence
     const queueEvidence = (
+      tempId: string,
       entityType: 'action_item' | 'decision' | 'risk',
-      entityId: string,
+      entityId: string, // For updates/closes this is real ID, for creates it's temp_id
       evidence: { quote: string; speaker: string | null; timestamp: string | null }[]
     ) => {
       for (const e of evidence) {
-        evidenceRecords.push({
+        evidenceData.push({
+          temp_id: tempId,
           entity_type: entityType,
           entity_id: entityId,
           meeting_id: meetingId,
@@ -331,15 +382,17 @@ export async function POST(
       }
     };
 
-    // Helper function to queue audit records
+    // Helper to queue audit
     const queueAudit = (
+      tempId: string,
       actionType: 'create' | 'update' | 'close',
       entityType: 'action_item' | 'decision' | 'risk',
       entityId: string,
       before: unknown | null,
       after: unknown | null
     ) => {
-      auditRecords.push({
+      auditData.push({
+        temp_id: tempId,
         user_id: user.id,
         action_type: actionType,
         entity_type: entityType,
@@ -350,9 +403,43 @@ export async function POST(
       });
     };
 
-    // Process accepted action items
-    log.debug('Processing action items', { count: acceptedActionItems.length });
+    // For update/close operations, we need to fetch existing items first
+    const existingItemsCache = new Map<string, Record<string, unknown>>();
+
+    // Pre-fetch existing action items that will be updated/closed
+    const actionItemsToFetch = acceptedActionItems
+      .filter((ai) => ai.operation !== 'create' && ai.external_id)
+      .map((ai) => ai.external_id as string);
+
+    if (actionItemsToFetch.length > 0) {
+      const { data: existingAIs } = await supabase
+        .from('action_items')
+        .select('*')
+        .in('id', actionItemsToFetch);
+      for (const ai of existingAIs || []) {
+        existingItemsCache.set(`action_item:${ai.id}`, ai);
+      }
+    }
+
+    // Pre-fetch existing risks that will be closed
+    const risksToFetch = acceptedRisks
+      .filter((r) => r.operation === 'close' && r.external_id)
+      .map((r) => r.external_id as string);
+
+    if (risksToFetch.length > 0) {
+      const { data: existingRisks } = await supabase
+        .from('risks')
+        .select('*')
+        .in('id', risksToFetch);
+      for (const r of existingRisks || []) {
+        existingItemsCache.set(`risk:${r.id}`, r);
+      }
+    }
+
+    // Process action items - generate embeddings and prepare data
+    log.debug('Preparing action items', { count: acceptedActionItems.length });
     for (const item of acceptedActionItems) {
+      const tempId = crypto.randomUUID();
       const text = `${item.title}. ${item.description}`;
       let embedding: number[] | null = null;
 
@@ -367,41 +454,30 @@ export async function POST(
       }
 
       if (item.operation === 'create') {
-        // Create new action item
-        const { data: newItem, error } = await supabase
-          .from('action_items')
-          .insert({
-            project_id: meeting.project_id,
-            title: item.title,
-            description: item.description,
-            status: item.status,
-            owner_user_id: item.owner.resolved_user_id,
-            owner_name: item.owner.name,
-            owner_email: item.owner.email,
-            due_date: item.due_date,
-            embedding,
-            source_meeting_id: meetingId,
-          })
-          .select()
-          .single();
+        actionItemsData.push({
+          temp_id: tempId,
+          operation: 'create',
+          project_id: meeting.project_id,
+          title: item.title,
+          description: item.description,
+          status: item.status,
+          owner_user_id: item.owner.resolved_user_id || null,
+          owner_name: item.owner.name,
+          owner_email: item.owner.email || null,
+          due_date: item.due_date || null,
+          embedding,
+          source_meeting_id: meetingId,
+        });
 
-        if (error) throw error;
-        actionItemsCreated++;
-
-        // Queue evidence records for batch insertion
-        queueEvidence('action_item', newItem.id, item.evidence);
-
-        // Queue audit log for batch insertion
-        queueAudit('create', 'action_item', newItem.id, null, newItem);
+        queueEvidence(tempId, 'action_item', tempId, item.evidence);
+        queueAudit(tempId, 'create', 'action_item', tempId, null, {
+          title: item.title,
+          description: item.description,
+          status: item.status,
+        });
       } else if (item.operation === 'update' && item.external_id) {
-        // Get existing item for audit and updates array
-        const { data: existing } = await supabase
-          .from('action_items')
-          .select('*')
-          .eq('id', item.external_id)
-          .single();
+        const existing = existingItemsCache.get(`action_item:${item.external_id}`) || {};
 
-        // Create AI update comment describing changes (using proposed values for comparison)
         const proposedUpdate = {
           title: item.title,
           description: item.description,
@@ -413,7 +489,7 @@ export async function POST(
         const aiUpdate = createAIUpdateComment({
           operation: 'update',
           entityType: 'action_item',
-          existing: existing || {},
+          existing,
           updated: proposedUpdate,
           evidence: item.evidence,
           meetingId,
@@ -422,49 +498,37 @@ export async function POST(
           publisherName,
         });
 
-        // Append AI comment to updates array
-        const currentUpdates = parseExistingUpdates(existing?.updates);
+        const currentUpdates = parseExistingUpdates(
+          (existing as Record<string, unknown>).updates as string | unknown[] | null | undefined
+        );
         currentUpdates.push(aiUpdate);
 
-        // Update existing action item - ATOMIC: include updates in same query
-        const { data: updated, error } = await supabase
-          .from('action_items')
-          .update({
-            title: item.title,
-            description: item.description,
-            status: item.status,
-            owner_user_id: item.owner.resolved_user_id,
-            owner_name: item.owner.name,
-            owner_email: item.owner.email,
-            due_date: item.due_date,
-            embedding,
-            updates: JSON.stringify(currentUpdates),
-          })
-          .eq('id', item.external_id)
-          .select()
-          .single();
+        actionItemsData.push({
+          temp_id: tempId,
+          operation: 'update',
+          external_id: item.external_id,
+          project_id: meeting.project_id,
+          title: item.title,
+          description: item.description,
+          status: item.status,
+          owner_user_id: item.owner.resolved_user_id || null,
+          owner_name: item.owner.name,
+          owner_email: item.owner.email || null,
+          due_date: item.due_date || null,
+          embedding,
+          source_meeting_id: meetingId,
+          updates_json: JSON.stringify(currentUpdates),
+        });
 
-        if (error) throw error;
-        actionItemsUpdated++;
-
-        // Queue evidence records for batch insertion
-        queueEvidence('action_item', item.external_id, item.evidence);
-
-        // Queue audit log for batch insertion
-        queueAudit('update', 'action_item', item.external_id, existing, updated);
+        queueEvidence(tempId, 'action_item', item.external_id, item.evidence);
+        queueAudit(tempId, 'update', 'action_item', item.external_id, existing, proposedUpdate);
       } else if (item.operation === 'close' && item.external_id) {
-        // Get existing item for audit and updates array
-        const { data: existing } = await supabase
-          .from('action_items')
-          .select('*')
-          .eq('id', item.external_id)
-          .single();
+        const existing = existingItemsCache.get(`action_item:${item.external_id}`) || {};
 
-        // Create AI update comment for closure
         const aiUpdate = createAIUpdateComment({
           operation: 'close',
           entityType: 'action_item',
-          existing: existing || {},
+          existing,
           updated: { status: 'Closed' },
           evidence: item.evidence,
           meetingId,
@@ -473,35 +537,39 @@ export async function POST(
           publisherName,
         });
 
-        // Append AI comment to updates array
-        const currentUpdates = parseExistingUpdates(existing?.updates);
+        const currentUpdates = parseExistingUpdates(
+          (existing as Record<string, unknown>).updates as string | unknown[] | null | undefined
+        );
         currentUpdates.push(aiUpdate);
 
-        // Close action item - ATOMIC: include updates in same query
-        const { data: updated, error } = await supabase
-          .from('action_items')
-          .update({
-            status: 'Closed',
-            updates: JSON.stringify(currentUpdates),
-          })
-          .eq('id', item.external_id)
-          .select()
-          .single();
+        actionItemsData.push({
+          temp_id: tempId,
+          operation: 'close',
+          external_id: item.external_id,
+          project_id: meeting.project_id,
+          title: item.title,
+          description: item.description,
+          status: 'Closed',
+          owner_user_id: item.owner.resolved_user_id || null,
+          owner_name: item.owner.name,
+          owner_email: item.owner.email || null,
+          due_date: item.due_date || null,
+          embedding: null,
+          source_meeting_id: meetingId,
+          updates_json: JSON.stringify(currentUpdates),
+        });
 
-        if (error) throw error;
-        actionItemsClosed++;
-
-        // Queue evidence records for batch insertion
-        queueEvidence('action_item', item.external_id, item.evidence);
-
-        // Queue audit log for batch insertion
-        queueAudit('close', 'action_item', item.external_id, existing, updated);
+        queueEvidence(tempId, 'action_item', item.external_id, item.evidence);
+        queueAudit(tempId, 'close', 'action_item', item.external_id, existing, { status: 'Closed' });
       }
     }
 
-    // Process accepted decisions
-    log.debug('Processing decisions', { count: acceptedDecisions.length });
+    // Process decisions - generate embeddings and prepare data
+    log.debug('Preparing decisions', { count: acceptedDecisions.length });
     for (const item of acceptedDecisions) {
+      if (item.operation !== 'create') continue;
+
+      const tempId = crypto.randomUUID();
       const text = `${item.title}. ${item.rationale}`;
       let embedding: number[] | null = null;
 
@@ -515,43 +583,36 @@ export async function POST(
         });
       }
 
-      if (item.operation === 'create') {
-        const { data: newItem, error } = await supabase
-          .from('decisions')
-          .insert({
-            project_id: meeting.project_id,
-            title: item.title,
-            rationale: item.rationale,
-            impact: item.impact,
-            category: item.category,
-            impact_areas: item.impact_areas,
-            status: item.status,
-            decision_maker_user_id: item.decision_maker.resolved_user_id,
-            decision_maker_name: item.decision_maker.name,
-            decision_maker_email: item.decision_maker.email,
-            outcome: item.outcome,
-            decision_date: meeting.date,
-            source: 'meeting',
-            embedding,
-            source_meeting_id: meetingId,
-          })
-          .select()
-          .single();
+      decisionsData.push({
+        temp_id: tempId,
+        operation: 'create',
+        project_id: meeting.project_id,
+        title: item.title,
+        rationale: item.rationale,
+        impact: item.impact,
+        category: item.category || null,
+        impact_areas: item.impact_areas || null,
+        status: item.status,
+        decision_maker_user_id: item.decision_maker.resolved_user_id || null,
+        decision_maker_name: item.decision_maker.name,
+        decision_maker_email: item.decision_maker.email || null,
+        outcome: item.outcome || null,
+        decision_date: meeting.date,
+        embedding,
+        source_meeting_id: meetingId,
+      });
 
-        if (error) throw error;
-        decisionsCreated++;
-
-        // Queue evidence records for batch insertion
-        queueEvidence('decision', newItem.id, item.evidence);
-
-        // Queue audit log for batch insertion
-        queueAudit('create', 'decision', newItem.id, null, newItem);
-      }
+      queueEvidence(tempId, 'decision', tempId, item.evidence);
+      queueAudit(tempId, 'create', 'decision', tempId, null, {
+        title: item.title,
+        rationale: item.rationale,
+      });
     }
 
-    // Process accepted risks
-    log.debug('Processing risks', { count: acceptedRisks.length });
+    // Process risks - generate embeddings and prepare data
+    log.debug('Preparing risks', { count: acceptedRisks.length });
     for (const item of acceptedRisks) {
+      const tempId = crypto.randomUUID();
       const text = `${item.title}. ${item.description}`;
       let embedding: number[] | null = null;
 
@@ -566,46 +627,35 @@ export async function POST(
       }
 
       if (item.operation === 'create') {
-        const { data: newItem, error } = await supabase
-          .from('risks')
-          .insert({
-            project_id: meeting.project_id,
-            title: item.title,
-            description: item.description,
-            probability: item.probability,
-            impact: item.impact,
-            mitigation: item.mitigation,
-            status: item.status,
-            owner_user_id: item.owner.resolved_user_id,
-            owner_name: item.owner.name,
-            owner_email: item.owner.email,
-            embedding,
-            source_meeting_id: meetingId,
-          })
-          .select()
-          .single();
+        risksData.push({
+          temp_id: tempId,
+          operation: 'create',
+          project_id: meeting.project_id,
+          title: item.title,
+          description: item.description,
+          probability: item.probability,
+          impact: item.impact,
+          mitigation: item.mitigation || null,
+          status: item.status,
+          owner_user_id: item.owner.resolved_user_id || null,
+          owner_name: item.owner.name,
+          owner_email: item.owner.email || null,
+          embedding,
+          source_meeting_id: meetingId,
+        });
 
-        if (error) throw error;
-        risksCreated++;
-
-        // Queue evidence records for batch insertion
-        queueEvidence('risk', newItem.id, item.evidence);
-
-        // Queue audit log for batch insertion
-        queueAudit('create', 'risk', newItem.id, null, newItem);
+        queueEvidence(tempId, 'risk', tempId, item.evidence);
+        queueAudit(tempId, 'create', 'risk', tempId, null, {
+          title: item.title,
+          description: item.description,
+        });
       } else if (item.operation === 'close' && item.external_id) {
-        // Get existing item for audit and updates array
-        const { data: existing } = await supabase
-          .from('risks')
-          .select('*')
-          .eq('id', item.external_id)
-          .single();
+        const existing = existingItemsCache.get(`risk:${item.external_id}`) || {};
 
-        // Create AI update comment for closure
         const aiUpdate = createAIUpdateComment({
           operation: 'close',
           entityType: 'risk',
-          existing: existing || {},
+          existing,
           updated: { status: 'Closed' },
           evidence: item.evidence,
           meetingId,
@@ -614,81 +664,71 @@ export async function POST(
           publisherName,
         });
 
-        // Append AI comment to updates array
-        const currentUpdates = parseExistingUpdates(existing?.updates);
+        const currentUpdates = parseExistingUpdates(
+          (existing as Record<string, unknown>).updates as string | unknown[] | null | undefined
+        );
         currentUpdates.push(aiUpdate);
 
-        // Close risk - ATOMIC: include updates in same query
-        const { data: updated, error } = await supabase
-          .from('risks')
-          .update({
-            status: 'Closed',
-            updates: JSON.stringify(currentUpdates),
-          })
-          .eq('id', item.external_id)
-          .select()
-          .single();
-
-        if (error) throw error;
-        risksClosed++;
-
-        // Queue evidence records for batch insertion
-        queueEvidence('risk', item.external_id, item.evidence);
-
-        // Queue audit log for batch insertion
-        queueAudit('close', 'risk', item.external_id, existing, updated);
-      }
-    }
-
-    // PERFORMANCE OPTIMIZATION: Batch insert all evidence records in a single query
-    if (evidenceRecords.length > 0) {
-      log.debug('Batch inserting evidence records', { count: evidenceRecords.length });
-      const { error: evidenceError } = await serviceClient.rpc('batch_insert_evidence', {
-        p_evidence_records: evidenceRecords,
-      });
-
-      if (evidenceError) {
-        // Fall back to individual inserts if batch fails (for backwards compatibility)
-        log.warn('Batch evidence insert failed, falling back to individual inserts', {
-          error: evidenceError.message,
+        risksData.push({
+          temp_id: tempId,
+          operation: 'close',
+          external_id: item.external_id,
+          project_id: meeting.project_id,
+          title: item.title,
+          description: item.description,
+          probability: item.probability,
+          impact: item.impact,
+          mitigation: item.mitigation || null,
+          status: 'Closed',
+          owner_user_id: item.owner.resolved_user_id || null,
+          owner_name: item.owner.name,
+          owner_email: item.owner.email || null,
+          embedding: null,
+          source_meeting_id: meetingId,
+          updates_json: JSON.stringify(currentUpdates),
         });
-        for (const record of evidenceRecords) {
-          await supabase.from('evidence').insert(record);
-        }
+
+        queueEvidence(tempId, 'risk', item.external_id, item.evidence);
+        queueAudit(tempId, 'close', 'risk', item.external_id, existing, { status: 'Closed' });
       }
     }
 
-    // PERFORMANCE OPTIMIZATION: Batch insert all audit logs in a single query
-    if (auditRecords.length > 0) {
-      log.debug('Batch inserting audit logs', { count: auditRecords.length });
-      const { error: auditError } = await serviceClient.rpc('batch_create_audit_logs', {
-        p_audit_records: auditRecords,
+    // Execute all operations in a single transaction
+    log.info('Executing transactional publish', {
+      meetingId,
+      actionItems: actionItemsData.length,
+      decisions: decisionsData.length,
+      risks: risksData.length,
+      evidence: evidenceData.length,
+      audits: auditData.length,
+    });
+
+    const { data: txResult, error: txError } = await serviceClient.rpc(
+      'publish_meeting_transaction',
+      {
+        p_meeting_id: meetingId,
+        p_action_items: actionItemsData,
+        p_decisions: decisionsData,
+        p_risks: risksData,
+        p_evidence_records: evidenceData,
+        p_audit_records: auditData,
+      }
+    );
+
+    if (txError) {
+      log.error('Transaction failed', {
+        meetingId,
+        error: txError.message,
       });
-
-      if (auditError) {
-        // Fall back to individual inserts if batch fails (for backwards compatibility)
-        log.warn('Batch audit log insert failed, falling back to individual inserts', {
-          error: auditError.message,
-        });
-        for (const record of auditRecords) {
-          await serviceClient.rpc('create_audit_log', {
-            p_user_id: record.user_id,
-            p_action_type: record.action_type,
-            p_entity_type: record.entity_type,
-            p_entity_id: record.entity_id,
-            p_project_id: record.project_id,
-            p_before: record.before_data,
-            p_after: record.after_data,
-          });
-        }
-      }
+      throw new Error(`Transaction failed: ${txError.message}`);
     }
 
-    // Update meeting status to Published
-    await supabase
-      .from('meetings')
-      .update({ status: 'Published' })
-      .eq('id', meetingId);
+    const actionItemsCreated = txResult?.action_items_created || 0;
+    const actionItemsUpdated = txResult?.action_items_updated || 0;
+    const actionItemsClosed = txResult?.action_items_closed || 0;
+    const decisionsCreated = txResult?.decisions_created || 0;
+    const risksCreated = txResult?.risks_created || 0;
+    const risksClosed = txResult?.risks_closed || 0;
 
     // Release lock
     await supabase.rpc('release_change_set_lock', {
@@ -714,9 +754,9 @@ export async function POST(
         closed: risksClosed,
       },
       embeddingFailures,
-      batchOperations: {
-        evidenceRecords: evidenceRecords.length,
-        auditRecords: auditRecords.length,
+      transactionalPublish: {
+        evidenceRecords: evidenceData.length,
+        auditRecords: auditData.length,
       },
     });
 

@@ -5,6 +5,8 @@
 
 import { getValidAccessToken, getValidAccessTokenService } from './drive-oauth';
 import { loggers } from '@/lib/logger';
+import { DRIVE_WEBHOOK_EXPIRATION_MS } from '@/lib/config';
+import { withRetry, isTransientError } from '@/lib/retry';
 import type {
   GoogleDriveFile,
   GoogleDriveFileList,
@@ -77,16 +79,23 @@ export async function listFolders(
     ...(pageToken && { pageToken }),
   });
 
-  const response = await fetch(`${DRIVE_API_BASE}/files?${params}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const data = await withRetry(
+    async () => {
+      const response = await fetch(`${DRIVE_API_BASE}/files?${params}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Failed to list folders: ${error}`);
-  }
+      if (!response.ok) {
+        const error = await response.text();
+        const err = new Error(`Failed to list folders: ${error}`);
+        (err as Error & { status: number }).status = response.status;
+        throw err;
+      }
 
-  const data: GoogleDriveFileList = await response.json();
+      return response.json() as Promise<GoogleDriveFileList>;
+    },
+    { context: 'Drive API: list folders', isRetryable: isTransientError }
+  );
 
   return {
     files: (data.files || []).map(transformDriveFile),
@@ -173,16 +182,23 @@ export async function listFilesInFolder(
     ...(pageToken && { pageToken }),
   });
 
-  const response = await fetch(`${DRIVE_API_BASE}/files?${params}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const data = await withRetry(
+    async () => {
+      const response = await fetch(`${DRIVE_API_BASE}/files?${params}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Failed to list files in folder: ${error}`);
-  }
+      if (!response.ok) {
+        const error = await response.text();
+        const err = new Error(`Failed to list files in folder: ${error}`);
+        (err as Error & { status: number }).status = response.status;
+        throw err;
+      }
 
-  const data: GoogleDriveFileList = await response.json();
+      return response.json() as Promise<GoogleDriveFileList>;
+    },
+    { context: 'Drive API: list files in folder', isRetryable: isTransientError }
+  );
 
   return {
     files: (data.files || []).map(transformDriveFile),
@@ -242,16 +258,23 @@ export async function downloadFile(
     throw new Error('No valid access token available. Please reconnect your Drive.');
   }
 
-  const response = await fetch(`${DRIVE_API_BASE}/files/${fileId}?alt=media`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  return withRetry(
+    async () => {
+      const response = await fetch(`${DRIVE_API_BASE}/files/${fileId}?alt=media`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Failed to download file: ${error}`);
-  }
+      if (!response.ok) {
+        const error = await response.text();
+        const err = new Error(`Failed to download file: ${error}`);
+        (err as Error & { status: number }).status = response.status;
+        throw err;
+      }
 
-  return response.arrayBuffer();
+      return response.arrayBuffer();
+    },
+    { context: 'Drive API: download file', isRetryable: isTransientError }
+  );
 }
 
 /**
@@ -359,7 +382,7 @@ export async function setupWatchChannel(
   webhookUrl: string,
   channelId: string,
   channelToken: string,
-  expirationMs: number = 24 * 60 * 60 * 1000 // 24 hours default
+  expirationMs: number = DRIVE_WEBHOOK_EXPIRATION_MS
 ): Promise<GoogleDriveWatchResponse> {
   const accessToken = await getValidAccessToken(userId);
   if (!accessToken) {

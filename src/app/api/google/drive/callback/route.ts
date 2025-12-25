@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { exchangeCodeForTokens, storeTokens, getUserEmail } from '@/lib/google/drive-oauth';
+import { loggers } from '@/lib/logger';
 import crypto from 'crypto';
+
+const log = loggers.drive;
 
 /**
  * Verifies the HMAC signature of the OAuth state parameter
@@ -12,7 +15,11 @@ function verifyStateSignature(
   timestamp: number,
   providedSignature: string
 ): boolean {
-  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || 'fallback-secret';
+  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!secret) {
+    log.error('SUPABASE_SERVICE_ROLE_KEY is not configured');
+    return false;
+  }
   const dataToSign = `${token}:${userId}:${timestamp}`;
   const expectedSignature = crypto
     .createHmac('sha256', secret)
@@ -44,7 +51,7 @@ export async function GET(request: NextRequest) {
 
     // Handle user denial or error
     if (error) {
-      console.warn('Google Drive OAuth error:', error);
+      log.warn('Google Drive OAuth error', { error });
       return NextResponse.redirect(
         new URL('/profile?error=drive_auth_denied', request.url)
       );
@@ -69,7 +76,7 @@ export async function GET(request: NextRequest) {
 
     // Verify state parameter (CSRF protection with HMAC signature)
     if (!state) {
-      console.error('Missing state parameter');
+      log.error('Missing state parameter in OAuth callback');
       return NextResponse.redirect(
         new URL('/profile?error=drive_auth_failed', request.url)
       );
@@ -86,7 +93,7 @@ export async function GET(request: NextRequest) {
 
       // Verify the state is for this user
       if (stateData.userId !== user.id) {
-        console.error('State user ID mismatch');
+        log.error('State user ID mismatch in OAuth callback', { userId: user.id });
         return NextResponse.redirect(
           new URL('/profile?error=drive_auth_failed', request.url)
         );
@@ -94,7 +101,7 @@ export async function GET(request: NextRequest) {
 
       // Verify state is not too old (5 minutes)
       if (Date.now() - stateData.timestamp > 5 * 60 * 1000) {
-        console.error('State expired');
+        log.error('OAuth state expired', { userId: user.id });
         return NextResponse.redirect(
           new URL('/profile?error=drive_auth_expired', request.url)
         );
@@ -109,14 +116,14 @@ export async function GET(request: NextRequest) {
           stateData.sig
         );
         if (!isValid) {
-          console.error('Invalid state signature - possible CSRF attack');
+          log.error('Invalid state signature - possible CSRF attack', { userId: user.id });
           return NextResponse.redirect(
             new URL('/profile?error=drive_auth_failed', request.url)
           );
         }
       }
     } catch {
-      console.error('Invalid state parameter');
+      log.error('Invalid state parameter in OAuth callback');
       return NextResponse.redirect(
         new URL('/profile?error=drive_auth_failed', request.url)
       );
@@ -127,7 +134,7 @@ export async function GET(request: NextRequest) {
 
     // Get the Google account email for display
     const googleEmail = await getUserEmail(tokens.access_token);
-    console.log(`Google Drive connected for user ${user.id} (${googleEmail})`);
+    log.info('Google Drive connected', { userId: user.id, googleEmail });
 
     // Store tokens in database
     await storeTokens(user.id, tokens);
@@ -137,7 +144,7 @@ export async function GET(request: NextRequest) {
       new URL('/profile?success=drive_connected', request.url)
     );
   } catch (error) {
-    console.error('Error handling Google Drive callback:', error);
+    log.error('Error handling Google Drive callback', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.redirect(
       new URL('/profile?error=drive_auth_failed', request.url)
     );

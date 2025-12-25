@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Search, MoreVertical, Trash2, Calendar, FileText, AlertTriangle } from 'lucide-react';
 import { cn, formatDateReadable } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
+import { clientLog } from '@/lib/client-logger';
 import type { Meeting } from '@/types/database';
 import type { MeetingCategory, MeetingStatus } from '@/types/enums';
 
@@ -81,7 +82,7 @@ export function MeetingManagement({ meetings }: MeetingManagementProps) {
       router.refresh();
       setSelectedMeeting(null);
     } catch (error) {
-      console.error('Error deleting meeting:', error);
+      clientLog.error('Error deleting meeting', { error: error instanceof Error ? error.message : 'Unknown error' });
       showToast('Failed to delete meeting: ' + (error as Error).message, 'error');
     } finally {
       setIsDeleting(false);
@@ -222,6 +223,13 @@ export function MeetingManagement({ meetings }: MeetingManagementProps) {
     </div>
   );
 }
+
+
+
+
+
+
+
 
 
 

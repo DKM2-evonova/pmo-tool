@@ -7,6 +7,7 @@ import { Button, Input } from '@/components/ui';
 import { Plus, Trash2, Calendar } from 'lucide-react';
 import { generateId } from '@/lib/utils';
 import { MilestoneStatus } from '@/types/enums';
+import { clientLog } from '@/lib/client-logger';
 import type { Milestone } from '@/types/database';
 
 interface ProjectFormProps {
@@ -73,50 +74,41 @@ export function ProjectForm({ project }: ProjectFormProps) {
 
       if (project) {
         // Update existing project
-        console.log('Step 1: Updating project...');
         const { error } = await supabase
           .from('projects')
           .update(projectData)
           .eq('id', project.id);
 
         if (error) {
-          console.error('Update error:', error.message, error.code, error);
+          clientLog.error('Failed to update project', { message: error.message, code: error.code });
           throw new Error(error.message || 'Failed to update project');
         }
         router.push(`/projects/${project.id}`);
       } else {
         // Create new project
-        console.log('Step 1: Creating project with data:', projectData);
         const { data: newProject, error: createError } = await supabase
           .from('projects')
           .insert(projectData)
           .select()
           .single();
 
-        console.log('Step 2: Insert result:', { newProject, createError });
-
         if (createError) {
-          console.error(
-            'Create error:',
-            createError.message,
-            createError.code,
-            createError.details,
-            createError.hint
-          );
+          clientLog.error('Failed to create project', {
+            message: createError.message,
+            code: createError.code,
+            details: createError.details,
+          });
           throw new Error(
             createError.message || 'Failed to create project'
           );
         }
 
         // Add current user as owner
-        console.log('Step 3: Getting current user...');
         const {
           data: { user },
         } = await supabase.auth.getUser();
-        console.log('Step 4: User:', user?.id, user?.email);
 
         if (user && newProject) {
-          console.log('Step 5: Adding user as project owner...');
           const { error: memberError } = await supabase
             .from('project_members')
             .insert({
@@ -126,31 +118,25 @@ export function ProjectForm({ project }: ProjectFormProps) {
             });
 
           if (memberError) {
-            console.error(
-              'Member insert error:',
-              memberError.message,
-              memberError.code,
-              memberError.details
-            );
+            clientLog.error('Failed to add project owner', {
+              message: memberError.message,
+              code: memberError.code,
+            });
             throw new Error(
               memberError.message || 'Failed to add you as project owner'
             );
           }
         }
 
-        console.log('Step 6: Success! Redirecting...');
         router.push(`/projects/${newProject.id}`);
       }
       router.refresh();
     } catch (err: unknown) {
-      console.error('Caught error:', err);
-
       let errorMessage = 'Failed to save project. Please try again.';
 
       if (err instanceof Error) {
         errorMessage = err.message;
-        console.error('Error message:', err.message);
-        console.error('Error stack:', err.stack);
+        clientLog.error('Project save failed', { message: err.message });
       }
 
       setError(errorMessage);

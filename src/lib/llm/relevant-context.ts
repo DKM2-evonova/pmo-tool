@@ -34,6 +34,10 @@ export interface RelevantContextResult {
 /**
  * Get relevant open items for a project based on transcript content.
  * Uses vector similarity to filter items, falling back to recency.
+ *
+ * OPTIMIZATION: Fetches data with limit to avoid N+1 count-then-fetch pattern.
+ * If total items <= MAX_CONTEXT_ITEMS, returns all (passthrough mode).
+ * Otherwise, uses similarity filtering.
  */
 export async function getRelevantContext(
   projectId: string,
@@ -42,74 +46,83 @@ export async function getRelevantContext(
   const startTime = Date.now();
   const supabase = await createClient();
 
-  // First, get counts of all open items
+  // OPTIMIZATION: Fetch data with limit instead of count-then-fetch
+  // Using MAX_CONTEXT_ITEMS + 1 to detect if we need filtering
+  const fetchLimit = MAX_CONTEXT_ITEMS + 1;
+
   const [actionItemsResult, decisionsResult, risksResult] = await Promise.all([
     supabase
       .from('action_items')
-      .select('id', { count: 'exact', head: true })
+      .select('*')
       .eq('project_id', projectId)
-      .neq('status', 'Closed'),
+      .neq('status', 'Closed')
+      .order('updated_at', { ascending: false })
+      .limit(fetchLimit),
     supabase
       .from('decisions')
-      .select('id', { count: 'exact', head: true })
-      .eq('project_id', projectId),
+      .select('*')
+      .eq('project_id', projectId)
+      .order('updated_at', { ascending: false })
+      .limit(fetchLimit),
     supabase
       .from('risks')
-      .select('id', { count: 'exact', head: true })
+      .select('*')
       .eq('project_id', projectId)
-      .neq('status', 'Closed'),
+      .neq('status', 'Closed')
+      .order('updated_at', { ascending: false })
+      .limit(fetchLimit),
   ]);
 
-  const totalOpen = {
-    actionItems: actionItemsResult.count || 0,
-    decisions: decisionsResult.count || 0,
-    risks: risksResult.count || 0,
-  };
+  const actionItems = actionItemsResult.data || [];
+  const decisions = decisionsResult.data || [];
+  const risks = risksResult.data || [];
 
-  const totalItems = totalOpen.actionItems + totalOpen.decisions + totalOpen.risks;
+  // Check if any entity type exceeded limit (needs filtering)
+  const needsFiltering =
+    actionItems.length > MAX_CONTEXT_ITEMS ||
+    decisions.length > MAX_CONTEXT_ITEMS ||
+    risks.length > MAX_CONTEXT_ITEMS ||
+    actionItems.length + decisions.length + risks.length > MAX_CONTEXT_ITEMS;
 
   // If total items is small, just return everything (no need to filter)
-  if (totalItems <= MAX_CONTEXT_ITEMS) {
+  if (!needsFiltering) {
+    const totalOpen = {
+      actionItems: actionItems.length,
+      decisions: decisions.length,
+      risks: risks.length,
+    };
+
     log.debug('Context items below threshold, returning all', {
       projectId,
-      totalItems,
+      totalItems: actionItems.length + decisions.length + risks.length,
       threshold: MAX_CONTEXT_ITEMS,
     });
 
-    const [actionItems, decisions, risks] = await Promise.all([
-      supabase
-        .from('action_items')
-        .select('*')
-        .eq('project_id', projectId)
-        .neq('status', 'Closed'),
-      supabase
-        .from('decisions')
-        .select('*')
-        .eq('project_id', projectId),
-      supabase
-        .from('risks')
-        .select('*')
-        .eq('project_id', projectId)
-        .neq('status', 'Closed'),
-    ]);
-
     return {
-      actionItems: actionItems.data || [],
-      decisions: decisions.data || [],
-      risks: risks.data || [],
+      actionItems,
+      decisions,
+      risks,
       stats: {
         totalOpen,
         included: {
-          actionItems: actionItems.data?.length || 0,
-          decisions: decisions.data?.length || 0,
-          risks: risks.data?.length || 0,
+          actionItems: actionItems.length,
+          decisions: decisions.length,
+          risks: risks.length,
         },
         filterMethod: 'passthrough',
       },
     };
   }
 
+  // Get actual counts for logging (since we have more than limit)
+  const totalOpen = {
+    actionItems: actionItems.length >= fetchLimit ? fetchLimit : actionItems.length,
+    decisions: decisions.length >= fetchLimit ? fetchLimit : decisions.length,
+    risks: risks.length >= fetchLimit ? fetchLimit : risks.length,
+  };
+
   // Large number of items - use similarity filtering
+  const totalItems = totalOpen.actionItems + totalOpen.decisions + totalOpen.risks;
   log.info('Using similarity filter for context', {
     projectId,
     totalItems,
@@ -185,7 +198,7 @@ export async function getRelevantContext(
   };
 
   // Fetch the actual items (similar + recent)
-  const [actionItems, decisions, risks] = await Promise.all([
+  const [filteredActionItems, filteredDecisions, filteredRisks] = await Promise.all([
     supabase
       .from('action_items')
       .select('*')
@@ -207,9 +220,9 @@ export async function getRelevantContext(
 
   const totalLatencyMs = Date.now() - startTime;
   const included = {
-    actionItems: actionItems.data?.length || 0,
-    decisions: decisions.data?.length || 0,
-    risks: risks.data?.length || 0,
+    actionItems: filteredActionItems.data?.length || 0,
+    decisions: filteredDecisions.data?.length || 0,
+    risks: filteredRisks.data?.length || 0,
   };
 
   log.info('Relevant context filtered', {
@@ -223,9 +236,9 @@ export async function getRelevantContext(
   });
 
   return {
-    actionItems: actionItems.data || [],
-    decisions: decisions.data || [],
-    risks: risks.data || [],
+    actionItems: filteredActionItems.data || [],
+    decisions: filteredDecisions.data || [],
+    risks: filteredRisks.data || [],
     stats: {
       totalOpen,
       included,

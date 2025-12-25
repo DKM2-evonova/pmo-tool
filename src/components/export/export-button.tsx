@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Download, ChevronDown, FileText, Table, File } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
+import { clientLog } from '@/lib/client-logger';
 import {
   downloadCSV,
   exportActionItemsToCSV,
@@ -52,7 +53,7 @@ export function ExportButton({ type, data, projectName }: ExportButtonProps) {
         }
       }
     } catch (error) {
-      console.error('Export failed:', error);
+      clientLog.error('Export failed', { error: error instanceof Error ? error.message : 'Unknown error' });
       showToast('Export failed. Please try again.', 'error');
     } finally {
       setIsExporting(false);

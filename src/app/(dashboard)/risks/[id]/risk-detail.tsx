@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Button, Badge, Input, Select } from '@/components/ui';
 import { formatDateReadable, getInitials, calculateRiskSeverity, cn } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
+import { clientLog } from '@/lib/client-logger';
 import {
   ArrowLeft,
   Edit3,
@@ -148,7 +149,7 @@ export function RiskDetail({ risk: initialRisk, projectMembers, currentUserId }:
       setNewUpdate('');
       router.refresh();
     } catch (error: unknown) {
-      console.error('Failed to add update:', error);
+      clientLog.error('Failed to add update', { error: error instanceof Error ? error.message : 'Unknown error' });
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       showToast(`Failed to add status update: ${errorMessage}`, 'error');
     } finally {

@@ -122,18 +122,62 @@ export async function POST(request: NextRequest) {
       }
 
       // Trigger sync for this folder
-      // Note: This is async but we return immediately
+      // Note: This is async but we return immediately to meet webhook response time requirements
+      // We track the processing result in the database for visibility and potential retry
       processWebhookChange(channel.user_id, folder.id)
-        .then((result) => {
+        .then(async (result) => {
           log.info('Webhook sync completed', {
             channelId,
+            folderId: folder.id,
             processed: result.processed,
             skipped: result.skipped,
             failed: result.failed,
+            errors: result.errors.length > 0 ? result.errors : undefined,
           });
+
+          // Update channel with last successful sync info
+          try {
+            await supabase
+              .from('drive_webhook_channels')
+              .update({
+                last_sync_at: new Date().toISOString(),
+                last_sync_status: result.failed > 0 ? 'partial' : 'success',
+                last_sync_processed: result.processed,
+                last_sync_failed: result.failed,
+              })
+              .eq('id', channel.id);
+          } catch (updateError) {
+            log.warn('Failed to update channel sync status', {
+              channelId,
+              error: updateError instanceof Error ? updateError.message : 'Unknown error',
+            });
+          }
         })
-        .catch((error) => {
-          log.error('Webhook sync failed', { channelId, error: error instanceof Error ? error.message : 'Unknown error' });
+        .catch(async (error) => {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          log.error('Webhook sync failed', {
+            channelId,
+            folderId: folder.id,
+            error: errorMessage,
+            stack: error instanceof Error ? error.stack : undefined,
+          });
+
+          // Track the failure in the database for potential retry
+          try {
+            await supabase
+              .from('drive_webhook_channels')
+              .update({
+                last_sync_at: new Date().toISOString(),
+                last_sync_status: 'failed',
+                last_sync_error: errorMessage,
+              })
+              .eq('id', channel.id);
+          } catch (updateError) {
+            log.warn('Failed to update channel error status', {
+              channelId,
+              error: updateError instanceof Error ? updateError.message : 'Unknown error',
+            });
+          }
         });
 
       return NextResponse.json({ status: 'processing' });

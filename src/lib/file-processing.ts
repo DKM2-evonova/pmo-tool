@@ -1,5 +1,6 @@
 import pdfParse from 'pdf-parse';
 import { loggers } from '@/lib/logger';
+import { FILE_MAX_SIZE_BYTES, FILE_MIN_TEXT_CHARS } from '@/lib/config';
 
 const log = loggers.file;
 
@@ -100,7 +101,7 @@ export async function extractTextFromDocx(buffer: ArrayBuffer): Promise<FileProc
         }
 
         // Check if we got meaningful text
-        if (extractedText && extractedText.length > 10) { // Require at least 10 characters
+        if (extractedText && extractedText.length > FILE_MIN_TEXT_CHARS) {
           log.info('Successfully extracted text', { strategy: strategy.name, charCount: extractedText.length });
           return {
             success: true,
@@ -354,12 +355,12 @@ export async function processFile(file: File): Promise<FileProcessingResult> {
   try {
     log.info('Starting file processing', { fileName: file.name, fileType: file.type, fileSize: file.size });
 
-    // Validate file size (max 50MB)
-    const maxSize = 50 * 1024 * 1024; // 50MB
-    if (file.size > maxSize) {
+    // Validate file size
+    if (file.size > FILE_MAX_SIZE_BYTES) {
+      const maxSizeMB = Math.round(FILE_MAX_SIZE_BYTES / (1024 * 1024));
       return {
         success: false,
-        error: 'File size exceeds 50MB limit. Please choose a smaller file.',
+        error: `File size exceeds ${maxSizeMB}MB limit. Please choose a smaller file.`,
       };
     }
 
@@ -489,7 +490,7 @@ async function tryMultipleFormats(buffer: ArrayBuffer, fileName: string): Promis
     try {
       log.debug('Trying extraction method', { method: method.name, fileName });
       const result = await method.fn();
-      if (result.success && result.text && result.text.length > 10) {
+      if (result.success && result.text && result.text.length > FILE_MIN_TEXT_CHARS) {
         log.info('Successfully extracted text', { method: method.name, fileName });
         return result;
       }

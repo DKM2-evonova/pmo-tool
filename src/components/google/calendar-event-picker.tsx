@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Calendar, Clock, Users, Video, ChevronDown, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui';
+import { clientLog } from '@/lib/client-logger';
 import type { CalendarEvent } from '@/lib/google/types';
 
 interface CalendarEventPickerProps {
@@ -45,7 +46,7 @@ export function CalendarEventPicker({ onSelect, onCancel }: CalendarEventPickerP
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return;
         setError('Failed to load calendar events');
-        console.error('Error fetching calendar events:', err);
+        clientLog.error('Failed to fetch calendar events', { error: err instanceof Error ? err.message : 'Unknown error' });
       } finally {
         if (!abortController.signal.aborted) {
           setIsLoading(false);
@@ -81,7 +82,7 @@ export function CalendarEventPicker({ onSelect, onCancel }: CalendarEventPickerP
       setEvents(data.events || []);
     } catch (err) {
       setError('Failed to load calendar events');
-      console.error('Error fetching calendar events:', err);
+      clientLog.error('Failed to fetch calendar events', { error: err instanceof Error ? err.message : 'Unknown error' });
     } finally {
       setIsLoading(false);
     }

@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getAuthorizationUrl } from '@/lib/google/oauth';
+import { loggers } from '@/lib/logger';
 import crypto from 'crypto';
+
+const log = loggers.calendar;
 
 /**
  * GET /api/google/calendar/auth
@@ -55,7 +58,7 @@ export async function GET() {
 
     return NextResponse.json({ authUrl });
   } catch (error) {
-    console.error('Error initiating Google Calendar auth:', error);
+    log.error('Error initiating Google Calendar auth', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: 'Failed to initiate authorization' },
       { status: 500 }

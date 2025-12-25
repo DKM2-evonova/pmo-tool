@@ -20,6 +20,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { Button } from '@/components/ui';
+import { clientLog } from '@/lib/client-logger';
 import type { CalendarEvent, CalendarAttendee } from '@/lib/google/types';
 
 interface CalendarStatus {
@@ -502,7 +503,7 @@ export function UpcomingMeetings() {
         }
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return;
-        console.error('Failed to fetch calendar status:', err);
+        clientLog.error('Failed to fetch calendar status', { error: err instanceof Error ? err.message : 'Unknown error' });
       } finally {
         if (!abortController.signal.aborted) {
           setIsLoading(false);
@@ -531,7 +532,7 @@ export function UpcomingMeetings() {
         }
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return;
-        console.error('Failed to fetch events:', err);
+        clientLog.error('Failed to fetch events', { error: err instanceof Error ? err.message : 'Unknown error' });
         setError('Failed to load upcoming meetings');
       }
     };
@@ -560,7 +561,7 @@ export function UpcomingMeetings() {
         }
       }
     } catch (err) {
-      console.error('Failed to fetch events:', err);
+      clientLog.error('Failed to fetch events', { error: err instanceof Error ? err.message : 'Unknown error' });
       setError('Failed to load upcoming meetings');
     }
   };

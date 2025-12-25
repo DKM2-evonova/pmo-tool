@@ -3,6 +3,9 @@ import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getStoredTokens, revokeToken, deleteTokens } from '@/lib/google/drive-oauth';
 import { stopWatchChannel } from '@/lib/google/drive-client';
+import { loggers } from '@/lib/logger';
+
+const log = loggers.drive;
 
 /**
  * POST /api/google/drive/disconnect
@@ -38,7 +41,7 @@ export async function POST() {
           try {
             await stopWatchChannel(user.id, channel.channel_id, channel.resource_id);
           } catch (error) {
-            console.warn('Failed to stop webhook channel:', channel.channel_id, error);
+            log.warn('Failed to stop webhook channel', { channelId: channel.channel_id, error: error instanceof Error ? error.message : 'Unknown error' });
           }
         }
       }
@@ -75,7 +78,7 @@ export async function POST() {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error disconnecting Google Drive:', error);
+    log.error('Error disconnecting Google Drive', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: 'Failed to disconnect Drive' },
       { status: 500 }

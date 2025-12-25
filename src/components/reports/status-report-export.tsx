@@ -5,6 +5,7 @@ import { Download, ChevronDown, FileSpreadsheet, FileText, Loader2 } from 'lucid
 import { generateProjectStatusPDF } from '@/lib/export/project-status-report';
 import { generateProjectStatusExcel } from '@/lib/export/project-status-excel';
 import { useToast } from '@/components/ui/toast';
+import { clientLog } from '@/lib/client-logger';
 import type { ActionItemWithOwner, RiskWithOwner, DecisionWithMaker, Milestone } from '@/types/database';
 
 interface StatusReportExportProps {
@@ -67,7 +68,7 @@ export function StatusReportExport({
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Export failed:', error);
+      clientLog.error('Export failed', { error: error instanceof Error ? error.message : 'Unknown error' });
       showToast('Export failed. Please try again.', 'error');
     } finally {
       setIsExporting(null);

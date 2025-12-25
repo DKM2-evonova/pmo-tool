@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui';
 import { HardDrive, Check, X, Loader2, FolderOpen, RefreshCw, Plus, Clock, AlertCircle } from 'lucide-react';
 import { DriveFolderSelector } from './drive-folder-selector';
+import { clientLog } from '@/lib/client-logger';
 import type { DriveConnectionStatus, WatchedFolderInfo } from '@/lib/google/drive-types';
 
 export function DriveConnect() {
@@ -12,6 +13,7 @@ export function DriveConnect() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncingFolderId, setSyncingFolderId] = useState<string | null>(null);
   const [showFolderSelector, setShowFolderSelector] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -24,7 +26,7 @@ export function DriveConnect() {
         setStatus(data);
       }
     } catch (err) {
-      console.error('Failed to fetch Drive status:', err);
+      clientLog.error('Failed to fetch Drive status', { error: err instanceof Error ? err.message : 'Unknown error' });
     } finally {
       setIsLoading(false);
     }
@@ -97,13 +99,19 @@ export function DriveConnect() {
     }
   };
 
-  const handleSync = async () => {
-    setIsSyncing(true);
+  const handleSync = async (folderId?: string) => {
+    if (folderId) {
+      setSyncingFolderId(folderId);
+    } else {
+      setIsSyncing(true);
+    }
     setError(null);
 
     try {
       const response = await fetch('/api/google/drive/sync', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: folderId ? JSON.stringify({ folderId }) : undefined,
       });
 
       if (!response.ok) {
@@ -121,6 +129,7 @@ export function DriveConnect() {
       setError('Failed to sync folders');
     } finally {
       setIsSyncing(false);
+      setSyncingFolderId(null);
     }
   };
 
@@ -247,7 +256,7 @@ export function DriveConnect() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleSync}
+                onClick={() => handleSync()}
                 isLoading={isSyncing}
                 leftIcon={<RefreshCw className="h-4 w-4" />}
               >
@@ -302,6 +311,8 @@ export function DriveConnect() {
                     key={folder.id}
                     folder={folder}
                     onRemove={() => handleRemoveFolder(folder.id, folder.folderName)}
+                    onSync={() => handleSync(folder.id)}
+                    isSyncing={syncingFolderId === folder.id}
                   />
                 ))}
               </div>
@@ -313,6 +324,13 @@ export function DriveConnect() {
             <div className="rounded-lg bg-warning-50 p-3 text-sm text-warning-700">
               {status.pendingImportsCount} file(s) pending import
             </div>
+          )}
+
+          {/* Localhost hint */}
+          {status.watchedFolders.length > 0 && !status.watchedFolders.some(f => f.webhookActive) && (
+            <p className="text-xs text-surface-400 mt-2">
+              Tip: On localhost, click &quot;Sync Now&quot; to fetch new files. Real-time sync requires a public URL.
+            </p>
           )}
         </div>
       ) : (
@@ -346,9 +364,13 @@ export function DriveConnect() {
 function WatchedFolderCard({
   folder,
   onRemove,
+  onSync,
+  isSyncing,
 }: {
   folder: WatchedFolderInfo;
   onRemove: () => void;
+  onSync: () => void;
+  isSyncing: boolean;
 }) {
   return (
     <div className="flex items-center justify-between rounded-lg border border-surface-200 bg-surface-50 p-3">
@@ -377,14 +399,26 @@ function WatchedFolderCard({
           </div>
         </div>
       </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={onRemove}
-        className="text-surface-400 hover:text-danger-600"
-      >
-        <X className="h-4 w-4" />
-      </Button>
+      <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onSync}
+          disabled={isSyncing}
+          className="text-surface-500 hover:text-primary-600"
+          title="Sync this folder now"
+        >
+          <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onRemove}
+          className="text-surface-400 hover:text-danger-600"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
     </div>
   );
 }

@@ -16,6 +16,7 @@ import {
 import { getValidAccessTokenService } from './drive-oauth';
 import { processFile, FileProcessingResult } from '@/lib/file-processing';
 import { loggers } from '@/lib/logger';
+import { FINGERPRINT_SAMPLE_SIZE, TRANSCRIPT_MIN_CHARS } from '@/lib/config';
 import type {
   SyncResult,
   FileProcessingResult as DriveFileProcessingResult,
@@ -31,8 +32,8 @@ const log = loggers.drive;
  * Generate a content fingerprint for duplicate detection
  */
 function generateContentFingerprint(content: string): string {
-  // Use first 2000 characters for fingerprint
-  const sample = content.substring(0, 2000);
+  // Use first N characters for fingerprint (from config)
+  const sample = content.substring(0, FINGERPRINT_SAMPLE_SIZE);
   return crypto.createHash('sha256').update(sample).digest('hex');
 }
 
@@ -57,8 +58,9 @@ async function checkForDuplicate(
 
   if (error) {
     log.error('Error checking for duplicate', { error: error.message, projectId, title });
-    // On error, assume not duplicate to avoid blocking
-    return { isDuplicate: false };
+    // On error, propagate the error rather than silently assuming not duplicate
+    // This prevents potential duplicates when the database has issues
+    throw new Error(`Duplicate check failed: ${error.message}`);
   }
 
   if (data && data.length > 0 && data[0].is_duplicate) {
@@ -116,40 +118,44 @@ async function processTranscriptFile(
 ): Promise<DriveFileProcessingResult> {
   const supabase = await createServiceClient();
 
-  // Check if already processed
-  const { data: existing } = await supabase
-    .from('drive_processed_files')
-    .select('id, status, meeting_id, skip_reason')
-    .eq('user_id', userId)
-    .eq('drive_file_id', file.id)
-    .single();
+  // Atomically claim the file for processing to prevent race conditions
+  const { data: claimResult, error: claimError } = await supabase.rpc(
+    'claim_drive_file_for_processing',
+    {
+      p_user_id: userId,
+      p_folder_id: folderId,
+      p_drive_file_id: file.id,
+      p_file_name: file.name,
+      p_file_mime_type: file.mimeType,
+      p_file_modified_time: file.modifiedTime,
+    }
+  );
 
-  if (existing?.status === 'completed') {
-    return { success: true, meetingId: existing.meeting_id || undefined };
+  if (claimError) {
+    log.error('Error claiming file for processing', { error: claimError.message, fileId: file.id });
+    return { success: false, error: 'Failed to claim file for processing' };
   }
 
-  if (existing?.status === 'skipped') {
-    return { success: true, skipped: true, skipReason: existing.skip_reason || 'Previously skipped' };
+  const claim = claimResult?.[0];
+  if (!claim) {
+    log.error('No claim result returned', { fileId: file.id });
+    return { success: false, error: 'Failed to claim file for processing' };
   }
 
-  // Create or update processed file record
-  const processedFileId = existing?.id || crypto.randomUUID();
+  // If we didn't claim the file, return based on existing status
+  if (!claim.claimed) {
+    if (claim.existing_status === 'completed') {
+      return { success: true, meetingId: claim.existing_meeting_id || undefined };
+    }
+    if (claim.existing_status === 'skipped') {
+      return { success: true, skipped: true, skipReason: claim.skip_reason || 'Previously skipped' };
+    }
+    // File is being processed by another request or was just claimed
+    log.debug('File already being processed', { fileId: file.id, status: claim.existing_status });
+    return { success: true, skipped: true, skipReason: claim.skip_reason || 'Being processed by another request' };
+  }
 
-  // Upsert the record
-  await supabase
-    .from('drive_processed_files')
-    .upsert({
-      id: processedFileId,
-      user_id: userId,
-      folder_id: folderId,
-      drive_file_id: file.id,
-      file_name: file.name,
-      file_mime_type: file.mimeType,
-      file_modified_time: file.modifiedTime,
-      status: 'processing',
-    }, {
-      onConflict: 'user_id,drive_file_id',
-    });
+  const processedFileId = claim.processed_file_id;
 
   try {
     // Download/export file content
@@ -175,7 +181,7 @@ async function processTranscriptFile(
     }
 
     // Validate we got meaningful content
-    if (!textContent || textContent.trim().length < 50) {
+    if (!textContent || textContent.trim().length < TRANSCRIPT_MIN_CHARS) {
       // Skip files with very little content
       await supabase
         .from('drive_processed_files')

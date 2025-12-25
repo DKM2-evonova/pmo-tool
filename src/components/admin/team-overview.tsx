@@ -7,6 +7,7 @@ import { Input } from '@/components/ui';
 import { Search, ChevronDown, ChevronUp, Users, User, Settings, Trash2 } from 'lucide-react';
 import { cn, getInitials } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
+import { clientLog } from '@/lib/client-logger';
 import type { Profile, ProjectContact } from '@/types/database';
 
 interface ProjectWithTeam {
@@ -74,7 +75,7 @@ export function TeamOverview({ projects }: TeamOverviewProps) {
 
       router.refresh();
     } catch (error) {
-      console.error('Error deleting project:', error);
+      clientLog.error('Error deleting project', { error: error instanceof Error ? error.message : 'Unknown error' });
       showToast('Failed to delete project: ' + (error as Error).message, 'error');
     } finally {
       setDeletingProjectId(null);

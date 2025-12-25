@@ -6,6 +6,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { loggers } from '@/lib/logger';
+import { TOKEN_REFRESH_BUFFER_MS } from '@/lib/config';
 import type { OAuthToken, GoogleTokenResponse } from './types';
 
 const log = loggers.drive;
@@ -202,9 +203,9 @@ export async function getValidAccessToken(userId: string): Promise<string | null
     return null;
   }
 
-  // Check if token is expired (with 5 minute buffer)
+  // Check if token is expired (with buffer)
   const expiresAt = tokens.expires_at ? new Date(tokens.expires_at) : null;
-  const isExpired = expiresAt && expiresAt.getTime() < Date.now() + 5 * 60 * 1000;
+  const isExpired = expiresAt && expiresAt.getTime() < Date.now() + TOKEN_REFRESH_BUFFER_MS;
 
   if (!isExpired) {
     return tokens.access_token;
@@ -239,9 +240,9 @@ export async function getValidAccessTokenService(userId: string): Promise<string
     return null;
   }
 
-  // Check if token is expired (with 5 minute buffer)
+  // Check if token is expired (with buffer)
   const expiresAt = tokens.expires_at ? new Date(tokens.expires_at) : null;
-  const isExpired = expiresAt && expiresAt.getTime() < Date.now() + 5 * 60 * 1000;
+  const isExpired = expiresAt && expiresAt.getTime() < Date.now() + TOKEN_REFRESH_BUFFER_MS;
 
   if (!isExpired) {
     return tokens.access_token;

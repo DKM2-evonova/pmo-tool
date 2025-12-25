@@ -7,6 +7,7 @@ import { Button, Select, Modal, ModalFooter, Input } from '@/components/ui';
 import { Plus, Trash2, Crown, User, UserPlus, Pencil, Users } from 'lucide-react';
 import { cn, getInitials } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
+import { clientLog } from '@/lib/client-logger';
 import type { Profile, ProjectContact } from '@/types/database';
 import type { ProjectRole } from '@/types/enums';
 
@@ -89,7 +90,7 @@ export function UnifiedTeamGrid({
       setSelectedRole('member');
       router.refresh();
     } catch (error) {
-      console.error('Error adding member:', error);
+      clientLog.error('Failed to add member', { error: error instanceof Error ? error.message : 'Unknown error' });
       setError('Failed to add member');
     } finally {
       setIsSubmitting(false);
@@ -109,7 +110,7 @@ export function UnifiedTeamGrid({
       if (error) throw error;
       router.refresh();
     } catch (error) {
-      console.error('Error removing member:', error);
+      clientLog.error('Failed to remove member', { error: error instanceof Error ? error.message : 'Unknown error' });
       showToast('Failed to remove member', 'error');
     }
   };
@@ -125,7 +126,7 @@ export function UnifiedTeamGrid({
       if (error) throw error;
       router.refresh();
     } catch (error) {
-      console.error('Error updating role:', error);
+      clientLog.error('Failed to update role', { error: error instanceof Error ? error.message : 'Unknown error' });
       showToast('Failed to update role', 'error');
     }
   };
@@ -156,7 +157,7 @@ export function UnifiedTeamGrid({
       setContactEmail('');
       router.refresh();
     } catch (error) {
-      console.error('Error adding contact:', error);
+      clientLog.error('Failed to add contact', { error: error instanceof Error ? error.message : 'Unknown error' });
       setError(error instanceof Error ? error.message : 'Failed to add contact');
     } finally {
       setIsSubmitting(false);
@@ -196,7 +197,7 @@ export function UnifiedTeamGrid({
       setContactEmail('');
       router.refresh();
     } catch (error) {
-      console.error('Error updating contact:', error);
+      clientLog.error('Failed to update contact', { error: error instanceof Error ? error.message : 'Unknown error' });
       setError(error instanceof Error ? error.message : 'Failed to update contact');
     } finally {
       setIsSubmitting(false);
@@ -218,7 +219,7 @@ export function UnifiedTeamGrid({
 
       router.refresh();
     } catch (error) {
-      console.error('Error removing contact:', error);
+      clientLog.error('Failed to remove contact', { error: error instanceof Error ? error.message : 'Unknown error' });
       showToast('Failed to remove contact', 'error');
     }
   };

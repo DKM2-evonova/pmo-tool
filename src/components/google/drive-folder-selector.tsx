@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Button, Input } from '@/components/ui';
 import { Folder, Search, Loader2, Check, X, ExternalLink } from 'lucide-react';
+import { clientLog } from '@/lib/client-logger';
 import type { DriveFile } from '@/lib/google/drive-types';
 
 interface DriveFolderSelectorProps {
@@ -43,7 +44,7 @@ export function DriveFolderSelector({ onSelect, onCancel }: DriveFolderSelectorP
           }
         }
       } catch (err) {
-        console.error('Failed to detect Meet Recordings folder:', err);
+        clientLog.error('Failed to detect Meet Recordings folder', { error: err instanceof Error ? err.message : 'Unknown error' });
       } finally {
         setIsLoadingMeetFolder(false);
       }
@@ -69,7 +70,7 @@ export function DriveFolderSelector({ onSelect, onCancel }: DriveFolderSelectorP
           setFolders(data.files || []);
         }
       } catch (err) {
-        console.error('Failed to search folders:', err);
+        clientLog.error('Failed to search folders', { error: err instanceof Error ? err.message : 'Unknown error' });
       } finally {
         setIsLoadingFolders(false);
       }

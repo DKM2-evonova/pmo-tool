@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getStoredTokens } from '@/lib/google/oauth';
+import { loggers } from '@/lib/logger';
+
+const log = loggers.calendar;
 
 /**
  * GET /api/google/calendar/status
@@ -54,7 +57,7 @@ export async function GET() {
       expiresAt: tokens.expires_at,
     });
   } catch (error) {
-    console.error('Error checking calendar status:', error);
+    log.error('Error checking calendar status', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: 'Failed to check calendar status' },
       { status: 500 }

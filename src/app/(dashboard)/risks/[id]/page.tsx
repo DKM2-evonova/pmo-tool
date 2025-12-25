@@ -1,6 +1,7 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import { RiskDetail } from './risk-detail';
+import { loggers } from '@/lib/logger';
 
 interface RiskPageProps {
   params: Promise<{ id: string }>;
@@ -67,7 +68,7 @@ export default async function RiskPage({ params }: RiskPageProps) {
     const parsed = risk.updates ? JSON.parse(risk.updates as string) : [];
     updatesArray = Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.warn('Failed to parse updates JSON:', e);
+    loggers.api.warn('Failed to parse updates JSON', { error: e instanceof Error ? e.message : 'Unknown error' });
     updatesArray = [];
   }
 

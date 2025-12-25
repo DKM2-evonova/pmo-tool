@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui';
 import { CategorySelector } from './category-selector';
 import { useToast } from '@/components/ui/toast';
+import { clientLog } from '@/lib/client-logger';
 import { Loader2, ArrowRight } from 'lucide-react';
 import type { MeetingCategory } from '@/types/enums';
 
@@ -42,7 +43,7 @@ export function CategorySelectionStep({
       // Refresh the page to trigger processing
       router.refresh();
     } catch (error) {
-      console.error('Error updating meeting category:', error);
+      clientLog.error('Error updating meeting category', { error: error instanceof Error ? error.message : 'Unknown error' });
       showToast('Failed to save category. Please try again.', 'error');
       setIsSubmitting(false);
     }

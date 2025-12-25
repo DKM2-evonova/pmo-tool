@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Chrome, Building2, Loader2, Briefcase } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { clientLog } from '@/lib/client-logger';
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState<'google' | 'microsoft' | 'email' | null>(
@@ -26,7 +27,7 @@ export default function LoginPage() {
         },
       });
     } catch (error) {
-      console.error('Sign in error:', error);
+      clientLog.error('Sign in error', { error: error instanceof Error ? error.message : 'Unknown error' });
       setIsLoading(null);
     }
   };
@@ -60,7 +61,7 @@ export default function LoginPage() {
             });
 
           if (profileError) {
-            console.error('Profile creation error:', profileError);
+            clientLog.error('Profile creation error', { error: profileError.message });
           }
 
           // For local development, auto-confirm and sign in

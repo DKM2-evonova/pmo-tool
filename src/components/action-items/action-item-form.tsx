@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button, Input, Select } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
+import { clientLog } from '@/lib/client-logger';
 import type { Profile } from '@/types/database';
 import type { EntityStatus } from '@/types/enums';
 
@@ -89,7 +90,7 @@ export function ActionItemForm({
       router.push('/action-items');
       router.refresh();
     } catch (error) {
-      console.error('Error creating action item:', error);
+      clientLog.error('Error creating action item', { error: error instanceof Error ? error.message : 'Unknown error' });
       showToast('Failed to create action item', 'error');
     } finally {
       setIsSubmitting(false);

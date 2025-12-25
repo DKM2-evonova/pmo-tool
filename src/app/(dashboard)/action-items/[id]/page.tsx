@@ -1,6 +1,7 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import { ActionItemDetail } from './action-item-detail';
+import { loggers } from '@/lib/logger';
 
 interface ActionItemPageProps {
   params: Promise<{ id: string }>;
@@ -67,7 +68,7 @@ export default async function ActionItemPage({ params }: ActionItemPageProps) {
     const parsed = actionItem.updates ? JSON.parse(actionItem.updates as string) : [];
     updatesArray = Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.warn('Failed to parse updates JSON:', e);
+    loggers.api.warn('Failed to parse updates JSON', { error: e instanceof Error ? e.message : 'Unknown error' });
     updatesArray = [];
   }
 

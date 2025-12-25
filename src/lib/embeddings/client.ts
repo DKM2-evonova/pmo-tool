@@ -5,6 +5,11 @@
 
 import OpenAI from 'openai';
 import { loggers } from '@/lib/logger';
+import {
+  EMBEDDING_CACHE_MAX_SIZE,
+  EMBEDDING_CACHE_TTL_MS,
+} from '@/lib/config';
+import { withRetry, isTransientError } from '@/lib/retry';
 
 const log = loggers.embedding;
 const EMBEDDING_DIMENSIONS = 1536;
@@ -18,8 +23,6 @@ interface EmbeddingCacheEntry {
 }
 
 const embeddingCache = new Map<string, EmbeddingCacheEntry>();
-const EMBEDDING_CACHE_MAX_SIZE = 500;
-const EMBEDDING_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
  * Generate a cache key from text (hash for long texts)
@@ -115,11 +118,17 @@ export async function generateEmbedding(text: string): Promise<number[]> {
   log.debug('Generating embedding', { textLength });
 
   try {
-    const response = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: text,
-      dimensions: EMBEDDING_DIMENSIONS,
-    });
+    const response = await withRetry(
+      () => openai.embeddings.create({
+        model: 'text-embedding-3-small',
+        input: text,
+        dimensions: EMBEDDING_DIMENSIONS,
+      }),
+      {
+        context: 'OpenAI embedding generation',
+        isRetryable: isTransientError,
+      }
+    );
 
     const durationMs = Date.now() - startTime;
     log.debug('Embedding generated', {
@@ -190,11 +199,17 @@ export async function generateEmbeddings(
   });
 
   try {
-    const response = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: uncachedTexts,
-      dimensions: EMBEDDING_DIMENSIONS,
-    });
+    const response = await withRetry(
+      () => openai.embeddings.create({
+        model: 'text-embedding-3-small',
+        input: uncachedTexts,
+        dimensions: EMBEDDING_DIMENSIONS,
+      }),
+      {
+        context: 'OpenAI batch embedding generation',
+        isRetryable: isTransientError,
+      }
+    );
 
     const durationMs = Date.now() - startTime;
     log.info('Batch embeddings generated', {

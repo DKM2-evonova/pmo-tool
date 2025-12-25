@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { listFolders, getStartPageToken, setupWatchChannel } from '@/lib/google/drive-client';
 import { isDriveConnected } from '@/lib/google/drive-oauth';
+import { loggers } from '@/lib/logger';
 import type { AddWatchedFolderRequest } from '@/lib/google/drive-types';
 import crypto from 'crypto';
+
+const log = loggers.drive;
 
 /**
  * GET /api/google/drive/folders
@@ -37,7 +40,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Error listing folders:', error);
+    log.error('Error listing folders', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: 'Failed to list folders' },
       { status: 500 }
@@ -128,7 +131,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (insertError) {
-      console.error('Failed to create watched folder:', insertError);
+      log.error('Failed to create watched folder', { error: insertError.message });
       return NextResponse.json(
         { error: 'Failed to add folder' },
         { status: 500 }
@@ -170,7 +173,7 @@ export async function POST(request: NextRequest) {
         webhookSetup = true;
       } catch (error) {
         // Webhook setup failed, but folder is still added - will use polling
-        console.warn('Failed to set up webhook, will use polling:', error);
+        log.warn('Failed to set up webhook, will use polling', { error: error instanceof Error ? error.message : 'Unknown error' });
       }
     }
 
@@ -186,7 +189,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Error adding watched folder:', error);
+    log.error('Error adding watched folder', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: 'Failed to add folder' },
       { status: 500 }

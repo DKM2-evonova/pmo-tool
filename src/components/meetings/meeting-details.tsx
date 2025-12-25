@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui';
 import { formatDateReadable } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
+import { clientLog } from '@/lib/client-logger';
 import type { Meeting } from '@/types/database';
 
 interface MeetingDetailsProps {
@@ -36,7 +37,7 @@ export function MeetingDetails({ meeting }: MeetingDetailsProps) {
         .download(meeting.source_file_path);
 
       if (error) {
-        console.error('Error downloading file:', error);
+        clientLog.error('Error downloading file', { error: error.message });
         showToast('Failed to download file. Please try again.', 'error');
         return;
       }
@@ -51,7 +52,7 @@ export function MeetingDetails({ meeting }: MeetingDetailsProps) {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Error downloading file:', error);
+      clientLog.error('Error downloading file', { error: error instanceof Error ? error.message : 'Unknown error' });
       showToast('Failed to download file. Please try again.', 'error');
     } finally {
       setIsDownloading(false);

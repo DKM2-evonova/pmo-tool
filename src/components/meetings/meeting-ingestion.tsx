@@ -9,6 +9,7 @@ import { AttendeeInput } from './attendee-input';
 import { CategorySelector } from './category-selector';
 import { CalendarEventPicker } from '@/components/google';
 import { useToast } from '@/components/ui/toast';
+import { clientLog } from '@/lib/client-logger';
 import {
   Upload,
   Chrome,
@@ -64,7 +65,7 @@ export function MeetingIngestion({
           setIsCalendarConnected(data.connected);
         }
       } catch (error) {
-        console.error('Failed to check calendar status:', error);
+        clientLog.error('Failed to check calendar status', { error: error instanceof Error ? error.message : 'Unknown error' });
       }
     }
     checkCalendarStatus();
@@ -156,7 +157,7 @@ export function MeetingIngestion({
           });
 
         if (uploadError) {
-          console.error('Error uploading file:', uploadError);
+          clientLog.error('Error uploading file', { error: uploadError.message });
           // Continue anyway - the meeting is created, just without the file
         } else {
           // Update meeting with file info
@@ -174,7 +175,7 @@ export function MeetingIngestion({
       // Navigate to the meeting processing page
       router.push(`/meetings/${meeting.id}/process`);
     } catch (error) {
-      console.error('Error creating meeting:', error);
+      clientLog.error('Error creating meeting', { error: error instanceof Error ? error.message : 'Unknown error' });
       showToast('Failed to create meeting. Please try again.', 'error');
     } finally {
       setIsSubmitting(false);
@@ -229,58 +230,11 @@ export function MeetingIngestion({
             <h2 className="text-lg font-semibold text-surface-900">
               Select Project & Meeting Details
             </h2>
+            <p className="text-sm text-surface-500">
+              Enter the meeting details manually, or import from your calendar if connected.
+            </p>
 
-            {/* Calendar Event Picker */}
-            {isCalendarConnected && !showCalendarPicker && (
-              <div className="rounded-lg border border-primary-200 bg-primary-50/50 p-4">
-                {selectedCalendarEvent ? (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Calendar className="h-5 w-5 text-primary-600" />
-                      <div>
-                        <p className="font-medium text-surface-900">
-                          Imported from Calendar
-                        </p>
-                        <p className="text-sm text-surface-500">
-                          {selectedCalendarEvent.title} - {selectedCalendarEvent.attendees.length} attendees
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleClearCalendarSelection}
-                    >
-                      <X className="h-4 w-4" />
-                      Clear
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Calendar className="h-5 w-5 text-primary-600" />
-                      <div>
-                        <p className="font-medium text-surface-900">
-                          Import from Google Calendar
-                        </p>
-                        <p className="text-sm text-surface-500">
-                          Auto-fill meeting details and attendees
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setShowCalendarPicker(true)}
-                    >
-                      Select Meeting
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Calendar Picker Modal/Inline */}
+            {/* Calendar Picker Modal/Inline - shown when selecting */}
             {showCalendarPicker && (
               <div className="rounded-lg border border-surface-200 bg-white p-4">
                 <CalendarEventPicker
@@ -292,6 +246,7 @@ export function MeetingIngestion({
 
             {!showCalendarPicker && (
               <>
+                {/* Main form fields - always visible */}
                 <Select
                   label="Project"
                   value={projectId}
@@ -311,6 +266,57 @@ export function MeetingIngestion({
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
                 />
+
+                {/* Optional Calendar Import - shown at bottom as helper */}
+                {isCalendarConnected && (
+                  <div className="rounded-lg border border-surface-200 bg-surface-50 p-4">
+                    {selectedCalendarEvent ? (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Calendar className="h-5 w-5 text-primary-600" />
+                          <div>
+                            <p className="font-medium text-surface-900">
+                              Imported from Calendar
+                            </p>
+                            <p className="text-sm text-surface-500">
+                              {selectedCalendarEvent.title} - {selectedCalendarEvent.attendees.length} attendees
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleClearCalendarSelection}
+                        >
+                          <X className="h-4 w-4" />
+                          Clear
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Calendar className="h-5 w-5 text-surface-400" />
+                          <div>
+                            <p className="text-sm font-medium text-surface-700">
+                              Import from Google Calendar
+                              <span className="ml-2 text-xs font-normal text-surface-400">(Optional)</span>
+                            </p>
+                            <p className="text-xs text-surface-500">
+                              Auto-fill details and attendees from a past meeting
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowCalendarPicker(true)}
+                        >
+                          Browse
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             )}
           </div>

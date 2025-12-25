@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui';
 import { Calendar, Check, X, Loader2, ExternalLink } from 'lucide-react';
+import { clientLog } from '@/lib/client-logger';
 
 interface CalendarStatus {
   configured: boolean;
@@ -41,7 +42,7 @@ export function CalendarConnect() {
         setStatus(data);
       }
     } catch (err) {
-      console.error('Failed to fetch calendar status:', err);
+      clientLog.error('Failed to fetch calendar status', { error: err instanceof Error ? err.message : 'Unknown error' });
     } finally {
       setIsLoading(false);
     }

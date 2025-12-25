@@ -7,6 +7,7 @@ import { Button } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
 import { AlertTriangle, ChevronDown, ChevronUp, UserPlus, RefreshCw } from 'lucide-react';
 import { findSimilarNames, buildPeopleRoster, type PersonMatch } from '@/lib/utils/name-matching';
+import { clientLog } from '@/lib/client-logger';
 import {
   EditItemModal,
   NewContactModal,
@@ -123,7 +124,7 @@ export function ReviewUI({
         router.refresh();
       }
     } catch (error) {
-      console.error('Failed to acquire lock:', error);
+      clientLog.error('Failed to acquire lock', { error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }, [supabase, proposedChangeSet.id, proposedChangeSet.lock_version, currentUserId, router, showToast]);
 
@@ -137,7 +138,7 @@ export function ReviewUI({
       setHasLock(false);
       router.refresh();
     } catch (error) {
-      console.error('Failed to release lock:', error);
+      clientLog.error('Failed to release lock', { error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }, [supabase, proposedChangeSet.id, currentUserId, router]);
 
@@ -151,7 +152,7 @@ export function ReviewUI({
       });
       router.refresh();
     } catch (error) {
-      console.error('Failed to force unlock:', error);
+      clientLog.error('Failed to force unlock', { error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }, [supabase, proposedChangeSet.id, router]);
 
@@ -398,7 +399,7 @@ export function ReviewUI({
 
       closeNewContactModal();
     } catch (error) {
-      console.error('Failed to add contact:', error);
+      clientLog.error('Failed to add contact', { error: error instanceof Error ? error.message : 'Unknown error' });
       showToast('Failed to add contact: ' + (error as Error).message, 'error');
     } finally {
       setIsAddingContact(false);
@@ -501,7 +502,7 @@ export function ReviewUI({
         });
       }
     } catch (error) {
-      console.error('Failed to add contacts:', error);
+      clientLog.error('Failed to add contacts', { error: error instanceof Error ? error.message : 'Unknown error' });
       showToast('Failed to add some contacts: ' + (error as Error).message, 'error');
     } finally {
       setIsAddingAllContacts(false);
@@ -578,7 +579,7 @@ export function ReviewUI({
 
       if (error) throw error;
     } catch (error) {
-      console.error('Failed to save changes:', error);
+      clientLog.error('Failed to save changes', { error: error instanceof Error ? error.message : 'Unknown error' });
       showToast('Failed to save changes', 'error');
     }
   }, [supabase, proposedItems, proposedChangeSet.id, showToast]);
@@ -619,7 +620,7 @@ export function ReviewUI({
       router.push(`/meetings/${meetingId}`);
       router.refresh();
     } catch (error) {
-      console.error('Publish failed:', error);
+      clientLog.error('Publish failed', { error: error instanceof Error ? error.message : 'Unknown error' });
       showToast('Failed to publish: ' + (error as Error).message, 'error');
     } finally {
       setIsPublishing(false);

@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getStoredTokens, revokeToken, deleteTokens } from '@/lib/google/oauth';
+import { loggers } from '@/lib/logger';
+
+const log = loggers.calendar;
 
 /**
  * POST /api/google/calendar/disconnect
@@ -32,7 +35,7 @@ export async function POST() {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error disconnecting Google Calendar:', error);
+    log.error('Error disconnecting Google Calendar', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: 'Failed to disconnect calendar' },
       { status: 500 }

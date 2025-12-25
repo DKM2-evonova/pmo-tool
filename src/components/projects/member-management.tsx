@@ -7,6 +7,7 @@ import { Button, Select, Modal, ModalFooter } from '@/components/ui';
 import { Plus, Trash2, Crown, User } from 'lucide-react';
 import { cn, getInitials } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
+import { clientLog } from '@/lib/client-logger';
 import type { Profile } from '@/types/database';
 import type { ProjectRole } from '@/types/enums';
 
@@ -74,7 +75,7 @@ export function MemberManagement({
       setSelectedRole('member');
       router.refresh();
     } catch (error) {
-      console.error('Error adding member:', error);
+      clientLog.error('Failed to add member', { error: error instanceof Error ? error.message : 'Unknown error' });
       showToast('Failed to add member', 'error');
     } finally {
       setIsSubmitting(false);
@@ -94,7 +95,7 @@ export function MemberManagement({
       if (error) throw error;
       router.refresh();
     } catch (error) {
-      console.error('Error removing member:', error);
+      clientLog.error('Failed to remove member', { error: error instanceof Error ? error.message : 'Unknown error' });
       showToast('Failed to remove member', 'error');
     }
   };
@@ -110,7 +111,7 @@ export function MemberManagement({
       if (error) throw error;
       router.refresh();
     } catch (error) {
-      console.error('Error updating role:', error);
+      clientLog.error('Failed to update role', { error: error instanceof Error ? error.message : 'Unknown error' });
       showToast('Failed to update role', 'error');
     }
   };

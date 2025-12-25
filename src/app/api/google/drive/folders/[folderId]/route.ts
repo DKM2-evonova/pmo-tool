@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { stopWatchChannel } from '@/lib/google/drive-client';
+import { loggers } from '@/lib/logger';
 import type { UpdateWatchedFolderRequest } from '@/lib/google/drive-types';
+
+const log = loggers.drive;
 
 interface RouteParams {
   params: Promise<{ folderId: string }>;
@@ -68,7 +71,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       recentFiles: recentFiles || [],
     });
   } catch (error) {
-    console.error('Error fetching folder:', error);
+    log.error('Error fetching folder', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: 'Failed to fetch folder' },
       { status: 500 }
@@ -148,7 +151,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       .single();
 
     if (updateError) {
-      console.error('Failed to update folder:', updateError);
+      log.error('Failed to update folder', { error: updateError.message });
       return NextResponse.json(
         { error: 'Failed to update folder' },
         { status: 500 }
@@ -166,7 +169,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
-    console.error('Error updating folder:', error);
+    log.error('Error updating folder', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: 'Failed to update folder' },
       { status: 500 }
@@ -214,7 +217,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
           try {
             await stopWatchChannel(user.id, channel.channel_id, channel.resource_id);
           } catch (error) {
-            console.warn('Failed to stop webhook channel:', channel.channel_id, error);
+            log.warn('Failed to stop webhook channel', { channelId: channel.channel_id, error: error instanceof Error ? error.message : 'Unknown error' });
           }
         }
       }
@@ -240,7 +243,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting folder:', error);
+    log.error('Error deleting folder', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: 'Failed to delete folder' },
       { status: 500 }

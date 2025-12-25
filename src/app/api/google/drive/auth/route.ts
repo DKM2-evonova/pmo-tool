@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getAuthorizationUrl, isDriveConfigured } from '@/lib/google/drive-oauth';
+import { loggers } from '@/lib/logger';
 import crypto from 'crypto';
+
+const log = loggers.drive;
 
 /**
  * GET /api/google/drive/auth
@@ -54,7 +57,7 @@ export async function GET() {
 
     return NextResponse.json({ authUrl });
   } catch (error) {
-    console.error('Error initiating Google Drive auth:', error);
+    log.error('Error initiating Google Drive auth', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: 'Failed to initiate authorization' },
       { status: 500 }

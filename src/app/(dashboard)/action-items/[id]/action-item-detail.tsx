@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Button, Badge, Input, Select } from '@/components/ui';
 import { formatDateReadable, isOverdue, getInitials, cn } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
+import { clientLog } from '@/lib/client-logger';
 import {
   ArrowLeft,
   Edit3,
@@ -144,7 +145,7 @@ export function ActionItemDetail({ actionItem: initialActionItem, projectMembers
       setNewUpdate('');
       router.refresh();
     } catch (error: unknown) {
-      console.error('Failed to add update:', error);
+      clientLog.error('Failed to add update', { error: error instanceof Error ? error.message : 'Unknown error' });
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       showToast(`Failed to add status update: ${errorMessage}`, 'error');
     } finally {
@@ -157,7 +158,6 @@ export function ActionItemDetail({ actionItem: initialActionItem, projectMembers
 
     setSaving(true);
     try {
-      console.log('Client: Assigning owner for action item:', actionItem.id);
       const response = await fetch(`/api/action-items/${actionItem.id}/update`, {
         method: 'POST',
         headers: {
@@ -201,7 +201,7 @@ export function ActionItemDetail({ actionItem: initialActionItem, projectMembers
 
       router.refresh();
     } catch (error: unknown) {
-      console.error('Failed to assign owner:', error);
+      clientLog.error('Failed to assign owner', { error: error instanceof Error ? error.message : 'Unknown error' });
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       showToast(`Failed to assign owner: ${errorMessage}`, 'error');
     } finally {
@@ -231,8 +231,8 @@ export function ActionItemDetail({ actionItem: initialActionItem, projectMembers
       const currentUpdates = Array.isArray(actionItem.updates) ? actionItem.updates : [];
       const updatedUpdates = [...currentUpdates, result.update];
       setActionItem({ ...actionItem, updates: updatedUpdates });
-    } catch (error: any) {
-      console.error('Failed to add owner change update:', error);
+    } catch (error: unknown) {
+      clientLog.error('Failed to add owner change update', { error: error instanceof Error ? error.message : 'Unknown error' });
       // Don't show alert for this as it's a secondary operation
     }
   };

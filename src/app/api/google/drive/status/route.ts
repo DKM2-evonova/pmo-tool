@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getStoredTokens, isDriveConfigured } from '@/lib/google/drive-oauth';
+import { loggers } from '@/lib/logger';
 import type { DriveConnectionStatus, WatchedFolderInfo } from '@/lib/google/drive-types';
+
+const log = loggers.drive;
 
 /**
  * GET /api/google/drive/status
@@ -112,7 +115,7 @@ export async function GET() {
 
     return NextResponse.json(status);
   } catch (error) {
-    console.error('Error checking Drive status:', error);
+    log.error('Error checking Drive status', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: 'Failed to check Drive status' },
       { status: 500 }

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Loader2, CheckCircle, XCircle, AlertTriangle, Sparkles, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui';
+import { clientLog } from '@/lib/client-logger';
 
 interface ProcessingStatusProps {
   meetingId: string;
@@ -20,6 +21,15 @@ type ProcessingStep =
   | 'checking_duplicates'
   | 'complete'
   | 'failed';
+
+// Static steps array moved outside component to prevent re-creation
+const PROCESSING_STEPS: Array<{ id: ProcessingStep; label: string }> = [
+  { id: 'loading_context', label: 'Loading project context...' },
+  { id: 'processing', label: 'Processing transcript with AI...' },
+  { id: 'validating', label: 'Validating output...' },
+  { id: 'checking_duplicates', label: 'Checking for duplicates...' },
+  { id: 'complete', label: 'Processing complete!' },
+];
 
 // Sub-stages shown during AI processing to keep users engaged
 const AI_PROCESSING_SUBSTAGES = [
@@ -54,27 +64,16 @@ export function ProcessingStatus({
   const substageIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const steps = [
-    { id: 'loading_context', label: 'Loading project context...' },
-    { id: 'processing', label: 'Processing transcript with AI...' },
-    { id: 'validating', label: 'Validating output...' },
-    { id: 'checking_duplicates', label: 'Checking for duplicates...' },
-    { id: 'complete', label: 'Processing complete!' },
-  ];
-
-  // Calculate substage interval based on estimated processing time
-  // We want to show enough substages to fill the expected time, but not too fast
-  const calculateSubstageInterval = () => {
+  // Memoize substage interval to prevent recalculation on every render
+  const substageInterval = useMemo(() => {
     const numSubstages = AI_PROCESSING_SUBSTAGES.length;
     // Use 80% of estimated time to cycle through substages (leave buffer for variance)
     const targetDuration = estimatedProcessingMs * 0.8;
     // Calculate interval, but keep it between 1.5s (fast) and 6s (slow)
     const calculatedInterval = targetDuration / numSubstages;
     return Math.max(1500, Math.min(6000, calculatedInterval));
-  };
+  }, [estimatedProcessingMs]);
 
-  const substageInterval = calculateSubstageInterval();
-  
   // Determine if we should show substages at all (skip if very fast processing expected)
   const showSubstages = estimatedProcessingMs > 8000;
 
@@ -172,7 +171,7 @@ export function ProcessingStatus({
           router.push(`/meetings/${meetingId}`);
         }, 1500);
       } catch (err) {
-        console.error('Processing error:', err);
+        clientLog.error('Processing error', { error: err instanceof Error ? err.message : 'Unknown error' });
         setCurrentStep('failed');
 
         // Provide user-friendly error messages
@@ -227,7 +226,7 @@ export function ProcessingStatus({
       // Refresh to show category selection
       router.refresh();
     } catch (err) {
-      console.error('Failed to reset meeting:', err);
+      clientLog.error('Failed to reset meeting', { error: err instanceof Error ? err.message : 'Unknown error' });
       setIsResetting(false);
     }
   };
@@ -246,11 +245,11 @@ export function ProcessingStatus({
 
       {/* Steps */}
       <div className="space-y-4">
-        {steps.map((step, index) => {
-          const stepIndex = steps.findIndex((s) => s.id === currentStep);
+        {PROCESSING_STEPS.map((step, index) => {
+          const stepIndex = PROCESSING_STEPS.findIndex((s) => s.id === currentStep);
           const isComplete =
             index < stepIndex ||
-            (currentStep === 'complete' && index === steps.length - 1);
+            (currentStep === 'complete' && index === PROCESSING_STEPS.length - 1);
           const isCurrent = step.id === currentStep;
           const isPending = index > stepIndex;
           const isProcessingStep = step.id === 'processing';

@@ -23,6 +23,63 @@ import {
 import { cn } from '@/lib/utils';
 import type { GlobalRole } from '@/types/enums';
 
+// Static navigation arrays moved outside component to prevent re-creation
+const NAVIGATION = [
+  {
+    name: 'Dashboard',
+    href: '/dashboard',
+    icon: LayoutDashboard,
+  },
+  {
+    name: 'Meetings',
+    href: '/meetings',
+    icon: Calendar,
+  },
+  {
+    name: 'Action Items',
+    href: '/action-items',
+    icon: CheckSquare,
+  },
+  {
+    name: 'Decisions',
+    href: '/decisions',
+    icon: FileText,
+  },
+  {
+    name: 'Risks & Issues',
+    href: '/risks',
+    icon: AlertTriangle,
+  },
+] as const;
+
+const ADMIN_NAVIGATION = [
+  {
+    name: 'Users',
+    href: '/admin/users',
+    icon: Users,
+  },
+  {
+    name: 'Team',
+    href: '/admin/team',
+    icon: Users2,
+  },
+  {
+    name: 'Meetings',
+    href: '/admin/meetings',
+    icon: Calendar,
+  },
+  {
+    name: 'Analytics',
+    href: '/admin/analytics',
+    icon: BarChart3,
+  },
+  {
+    name: 'Settings',
+    href: '/admin/settings',
+    icon: Settings,
+  },
+] as const;
+
 interface SidebarProps {
   projects: Array<{ id: string; name: string; role: string }>;
   userRole: GlobalRole;
@@ -35,62 +92,6 @@ export function Sidebar({ projects, userRole }: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const isAdmin = userRole === 'admin';
-
-  const navigation = [
-    {
-      name: 'Dashboard',
-      href: '/dashboard',
-      icon: LayoutDashboard,
-    },
-    {
-      name: 'Meetings',
-      href: '/meetings',
-      icon: Calendar,
-    },
-    {
-      name: 'Action Items',
-      href: '/action-items',
-      icon: CheckSquare,
-    },
-    {
-      name: 'Decisions',
-      href: '/decisions',
-      icon: FileText,
-    },
-    {
-      name: 'Risks & Issues',
-      href: '/risks',
-      icon: AlertTriangle,
-    },
-  ];
-
-  const adminNavigation = [
-    {
-      name: 'Users',
-      href: '/admin/users',
-      icon: Users,
-    },
-    {
-      name: 'Team',
-      href: '/admin/team',
-      icon: Users2,
-    },
-    {
-      name: 'Meetings',
-      href: '/admin/meetings',
-      icon: Calendar,
-    },
-    {
-      name: 'Analytics',
-      href: '/admin/analytics',
-      icon: BarChart3,
-    },
-    {
-      name: 'Settings',
-      href: '/admin/settings',
-      icon: Settings,
-    },
-  ];
 
   const NavLink = ({
     item,
@@ -170,7 +171,7 @@ export function Sidebar({ projects, userRole }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4 scrollbar-thin">
-        {navigation.map((item) => {
+        {NAVIGATION.map((item) => {
           const isActive =
             pathname === item.href || pathname.startsWith(item.href + '/');
           return (
@@ -258,7 +259,7 @@ export function Sidebar({ projects, userRole }: SidebarProps) {
               </p>
             )}
             <div className="mt-1 space-y-1">
-              {adminNavigation.map((item) => {
+              {ADMIN_NAVIGATION.map((item) => {
                 const isActive =
                   pathname === item.href || pathname.startsWith(item.href + '/');
                 return (

@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
@@ -51,7 +52,8 @@ export function DecisionFacetedFilters({
     selectedImpacts.size > 0 ||
     selectedStatuses.size > 0;
 
-  const updateFilter = (
+  // Memoize filter update to prevent recreation on every render
+  const updateFilter = useCallback((
     param: 'categories' | 'impacts' | 'statuses',
     value: string,
     isSelected: boolean
@@ -76,16 +78,17 @@ export function DecisionFacetedFilters({
     }
 
     router.push(url.pathname + url.search);
-  };
+  }, [router]);
 
-  const clearAllFilters = () => {
+  // Memoize clear function to prevent recreation on every render
+  const clearAllFilters = useCallback(() => {
     const url = new URL(window.location.href);
     url.searchParams.delete('categories');
     url.searchParams.delete('impacts');
     url.searchParams.delete('statuses');
     url.searchParams.delete('view');
     router.push(url.pathname + url.search);
-  };
+  }, [router]);
 
   return (
     <div className={cn('space-y-6', className)}>
