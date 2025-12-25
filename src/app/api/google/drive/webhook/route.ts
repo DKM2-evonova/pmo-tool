@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { processWebhookChange } from '@/lib/google/drive-ingestion';
+import { loggers } from '@/lib/logger';
 import crypto from 'crypto';
+
+const log = loggers.drive;
 
 /**
  * Verify the channel token from the webhook
@@ -11,7 +14,11 @@ function verifyChannelToken(
   channelId: string,
   providedToken: string
 ): boolean {
-  const secret = process.env.WEBHOOK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'default-secret';
+  const secret = process.env.WEBHOOK_SECRET;
+  if (!secret) {
+    log.error('WEBHOOK_SECRET environment variable is not set');
+    return false;
+  }
   const expectedToken = crypto
     .createHmac('sha256', secret)
     .update(`${userId}:${channelId}`)
@@ -41,7 +48,7 @@ export async function POST(request: NextRequest) {
     const channelToken = request.headers.get('x-goog-channel-token');
     const messageNumber = request.headers.get('x-goog-message-number');
 
-    console.log('Received Drive webhook:', {
+    log.debug('Received Drive webhook', {
       channelId,
       resourceId,
       resourceState,
@@ -51,7 +58,7 @@ export async function POST(request: NextRequest) {
 
     // Validate required headers
     if (!channelId || !resourceId) {
-      console.warn('Missing required webhook headers');
+      log.warn('Missing required webhook headers');
       // Return 200 to prevent retries
       return NextResponse.json({ status: 'missing_headers' });
     }
@@ -69,7 +76,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (channelError || !channel) {
-      console.warn('Unknown or inactive webhook channel:', channelId);
+      log.warn('Unknown or inactive webhook channel', { channelId });
       // Return 200 to stop retries for unknown channels
       return NextResponse.json({ status: 'unknown_channel' });
     }
@@ -78,7 +85,7 @@ export async function POST(request: NextRequest) {
     if (channelToken) {
       const isValid = verifyChannelToken(channel.user_id, channelId, channelToken);
       if (!isValid) {
-        console.error('Invalid channel token - possible spoofing attempt');
+        log.error('Invalid channel token - possible spoofing attempt', { channelId });
         // Still return 200 to prevent enumeration
         return NextResponse.json({ status: 'invalid_token' });
       }
@@ -86,7 +93,7 @@ export async function POST(request: NextRequest) {
 
     // Check if channel has expired
     if (new Date(channel.expiration) < new Date()) {
-      console.warn('Webhook channel has expired:', channelId);
+      log.warn('Webhook channel has expired', { channelId });
       // Mark as inactive
       await supabase
         .from('drive_webhook_channels')
@@ -99,18 +106,18 @@ export async function POST(request: NextRequest) {
     // Handle different resource states
     if (resourceState === 'sync') {
       // Initial sync confirmation - channel is now active
-      console.log('Webhook channel sync confirmed:', channelId);
+      log.info('Webhook channel sync confirmed', { channelId });
       return NextResponse.json({ status: 'sync_confirmed' });
     }
 
     if (resourceState === 'change') {
       // Something changed in the watched resource
-      console.log('Processing Drive changes for channel:', channelId);
+      log.info('Processing Drive changes for channel', { channelId });
 
       // Get the folder from the channel
       const folder = channel.drive_watched_folders as { id: string } | null;
       if (!folder) {
-        console.warn('No folder associated with channel:', channelId);
+        log.warn('No folder associated with channel', { channelId });
         return NextResponse.json({ status: 'no_folder' });
       }
 
@@ -118,7 +125,7 @@ export async function POST(request: NextRequest) {
       // Note: This is async but we return immediately
       processWebhookChange(channel.user_id, folder.id)
         .then((result) => {
-          console.log('Webhook sync completed:', {
+          log.info('Webhook sync completed', {
             channelId,
             processed: result.processed,
             skipped: result.skipped,
@@ -126,18 +133,18 @@ export async function POST(request: NextRequest) {
           });
         })
         .catch((error) => {
-          console.error('Webhook sync failed:', channelId, error);
+          log.error('Webhook sync failed', { channelId, error: error instanceof Error ? error.message : 'Unknown error' });
         });
 
       return NextResponse.json({ status: 'processing' });
     }
 
     // Other states: add, remove, update, trash, untrash
-    console.log('Unhandled resource state:', resourceState);
+    log.debug('Unhandled resource state', { resourceState });
     return NextResponse.json({ status: 'unhandled_state' });
 
   } catch (error) {
-    console.error('Error processing Drive webhook:', error);
+    log.error('Error processing Drive webhook', { error: error instanceof Error ? error.message : 'Unknown error' });
     // Return 200 even on errors to prevent retries
     return NextResponse.json({ status: 'error' });
   }

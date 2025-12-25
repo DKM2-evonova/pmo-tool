@@ -3,13 +3,19 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { syncFolder } from '@/lib/google/drive-ingestion';
 import { setupWatchChannel, stopWatchChannel, getStartPageToken } from '@/lib/google/drive-client';
 import { getValidAccessTokenService } from '@/lib/google/drive-oauth';
+import { loggers } from '@/lib/logger';
 import crypto from 'crypto';
+
+const log = loggers.drive;
 
 /**
  * Generate a channel token for webhook verification
  */
 function generateChannelToken(userId: string, channelId: string): string {
-  const secret = process.env.WEBHOOK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'default-secret';
+  const secret = process.env.WEBHOOK_SECRET;
+  if (!secret) {
+    throw new Error('WEBHOOK_SECRET environment variable is required');
+  }
   return crypto
     .createHmac('sha256', secret)
     .update(`${userId}:${channelId}`)
@@ -30,9 +36,14 @@ export async function GET(request: NextRequest) {
     const authHeader = request.headers.get('authorization');
     const cronSecret = process.env.CRON_SECRET;
 
-    // In production, require the cron secret
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-      console.warn('Unauthorized cron access attempt');
+    // Always require the cron secret in production
+    if (!cronSecret) {
+      log.error('CRON_SECRET environment variable is not set');
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    }
+
+    if (authHeader !== `Bearer ${cronSecret}`) {
+      log.warn('Unauthorized cron access attempt', { ip: request.headers.get('x-forwarded-for') || 'unknown' });
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -180,7 +191,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log('Drive sync cron completed:', results);
+    log.info('Drive sync cron completed', results);
 
     return NextResponse.json({
       success: true,
@@ -189,7 +200,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error in Drive sync cron:', error);
+    log.error('Error in Drive sync cron', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       {
         success: false,

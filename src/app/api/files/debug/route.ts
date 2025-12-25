@@ -1,8 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { processFile } from '@/lib/file-processing';
+import { createClient } from '@/lib/supabase/server';
+import { loggers } from '@/lib/logger';
+
+const log = loggers.file;
 
 export async function POST(request: NextRequest) {
+  // Only allow in development or with explicit flag
+  if (process.env.NODE_ENV === 'production' && !process.env.ENABLE_DEBUG_ROUTES) {
+    return NextResponse.json({ error: 'Debug routes disabled in production' }, { status: 404 });
+  }
+
   try {
+    // Require authentication
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    // In production (even with flag), require admin role
+    if (process.env.NODE_ENV === 'production') {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('global_role')
+        .eq('id', user.id)
+        .single();
+
+      if (profile?.global_role !== 'admin') {
+        return NextResponse.json(
+          { error: 'Admin access required' },
+          { status: 403 }
+        );
+      }
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
 
@@ -39,7 +75,7 @@ export async function POST(request: NextRequest) {
     // Try to process the file and see what happens
     let processingResult = null;
     try {
-      console.log('Testing file processing for debug...');
+      log.debug('Testing file processing for debug', { fileName: file.name });
       const result = await processFile(file);
       processingResult = {
         success: result.success,
@@ -48,7 +84,7 @@ export async function POST(request: NextRequest) {
         textPreview: result.text?.substring(0, 200) || null
       };
     } catch (processingError) {
-      console.error('Processing test failed:', processingError);
+      log.error('Processing test failed', { error: processingError instanceof Error ? processingError.message : 'Unknown error' });
       processingResult = {
         success: false,
         error: processingError instanceof Error ? processingError.message : 'Unknown processing error',
@@ -80,7 +116,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Debug API error:', error);
+    log.error('Debug API error', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: 'Debug failed' },
       { status: 500 }

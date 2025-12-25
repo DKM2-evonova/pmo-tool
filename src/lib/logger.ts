@@ -239,7 +239,17 @@ export const loggers = {
   publish: createLogger('publish'),
   api: createLogger('api'),
   auth: createLogger('auth'),
+  drive: createLogger('drive'),
+  calendar: createLogger('calendar'),
 } as const;
+
+
+
+
+
+
+
+
 
 
 

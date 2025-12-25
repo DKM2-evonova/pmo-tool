@@ -15,6 +15,7 @@ import {
 } from './drive-client';
 import { getValidAccessTokenService } from './drive-oauth';
 import { processFile, FileProcessingResult } from '@/lib/file-processing';
+import { loggers } from '@/lib/logger';
 import type {
   SyncResult,
   FileProcessingResult as DriveFileProcessingResult,
@@ -23,6 +24,8 @@ import type {
   DriveFile,
 } from './drive-types';
 import crypto from 'crypto';
+
+const log = loggers.drive;
 
 /**
  * Generate a content fingerprint for duplicate detection
@@ -53,7 +56,7 @@ async function checkForDuplicate(
   });
 
   if (error) {
-    console.error('Error checking for duplicate:', error);
+    log.error('Error checking for duplicate', { error: error.message, projectId, title });
     // On error, assume not duplicate to avoid blocking
     return { isDuplicate: false };
   }
@@ -192,7 +195,8 @@ async function processTranscriptFile(
     }
 
     // Parse meeting title and date from filename
-    const { title, date } = parseMeetingFromFilename(file.name);
+    // Use file's modifiedTime from Drive as fallback if no date found in filename
+    const { title, date } = parseMeetingFromFilename(file.name, file.modifiedTime);
 
     // Generate content fingerprint for duplicate detection
     const contentFingerprint = generateContentFingerprint(textContent);

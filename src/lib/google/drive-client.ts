@@ -4,6 +4,7 @@
  */
 
 import { getValidAccessToken, getValidAccessTokenService } from './drive-oauth';
+import { loggers } from '@/lib/logger';
 import type {
   GoogleDriveFile,
   GoogleDriveFileList,
@@ -17,6 +18,7 @@ import type {
 } from './drive-types';
 
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
+const log = loggers.drive;
 
 // MIME types we consider as potential transcripts
 const SUPPORTED_MIME_TYPES = [
@@ -402,7 +404,7 @@ export async function stopWatchChannel(
   const accessToken = await getValidAccessToken(userId);
   if (!accessToken) {
     // Can't stop channel without token, but that's okay - it will expire
-    console.warn('Cannot stop watch channel: no valid access token');
+    log.warn('Cannot stop watch channel: no valid access token', { channelId });
     return;
   }
 
@@ -420,7 +422,8 @@ export async function stopWatchChannel(
 
   if (!response.ok) {
     // Don't throw - channel might already be stopped or expired
-    console.warn('Failed to stop watch channel:', await response.text());
+    const errorText = await response.text();
+    log.warn('Failed to stop watch channel', { channelId, error: errorText });
   }
 }
 
@@ -453,8 +456,14 @@ export function looksLikeMeetTranscript(fileName: string): boolean {
 
 /**
  * Parse meeting info from a Google Meet transcript filename
+ * @param fileName - The filename to parse
+ * @param fallbackDate - Optional fallback date (ISO string) to use if no date found in filename.
+ *                       If not provided, defaults to today's date.
  */
-export function parseMeetingFromFilename(fileName: string): { title: string; date: string } {
+export function parseMeetingFromFilename(
+  fileName: string,
+  fallbackDate?: string
+): { title: string; date: string } {
   // Remove extension
   const name = fileName.replace(/\.[^.]+$/, '');
 
@@ -494,9 +503,13 @@ export function parseMeetingFromFilename(fileName: string): { title: string; dat
     };
   }
 
-  // Fallback: use today's date and full filename as title
+  // Fallback: use provided fallback date (e.g., file's modified time) or today's date
+  const defaultDate = fallbackDate
+    ? fallbackDate.split('T')[0]  // Extract date part from ISO string
+    : new Date().toISOString().split('T')[0];
+
   return {
     title: name.trim() || 'Imported Meeting',
-    date: new Date().toISOString().split('T')[0],
+    date: defaultDate,
   };
 }

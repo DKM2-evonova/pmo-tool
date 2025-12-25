@@ -4,7 +4,10 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { loggers } from '@/lib/logger';
 import type { OAuthToken, GoogleTokenResponse } from './types';
+
+const log = loggers.calendar;
 
 // OAuth configuration
 const GOOGLE_OAUTH_CONFIG = {
@@ -101,7 +104,7 @@ export async function revokeToken(token: string): Promise<void> {
   // Google returns 200 on success, but we don't throw on failure
   // since we want to clean up our database regardless
   if (!response.ok) {
-    console.warn('Failed to revoke token with Google, continuing with local cleanup');
+    log.warn('Failed to revoke token with Google, continuing with local cleanup');
   }
 }
 
@@ -190,7 +193,7 @@ export async function getValidAccessToken(userId: string): Promise<string | null
     });
     return newTokens.access_token;
   } catch (error) {
-    console.error('Failed to refresh token:', error);
+    log.error('Failed to refresh token', { error: error instanceof Error ? error.message : 'Unknown error', userId });
     return null;
   }
 }

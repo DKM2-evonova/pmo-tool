@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { isDriveConnected } from '@/lib/google/drive-oauth';
 import { syncFolder } from '@/lib/google/drive-ingestion';
+import { loggers } from '@/lib/logger';
+
+const log = loggers.drive;
 
 /**
  * POST /api/google/drive/sync
@@ -48,7 +51,7 @@ export async function POST(request: NextRequest) {
     const { data: folders, error: fetchError } = await foldersQuery;
 
     if (fetchError) {
-      console.error('Failed to fetch folders:', fetchError);
+      log.error('Failed to fetch folders', { error: fetchError.message });
       return NextResponse.json(
         { error: 'Failed to fetch folders' },
         { status: 500 }
@@ -101,7 +104,7 @@ export async function POST(request: NextRequest) {
       results,
     });
   } catch (error) {
-    console.error('Error syncing folders:', error);
+    log.error('Error syncing folders', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: 'Failed to sync folders' },
       { status: 500 }

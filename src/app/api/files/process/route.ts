@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { processFile } from '@/lib/file-processing';
+import { createClient } from '@/lib/supabase/server';
 import { loggers } from '@/lib/logger';
 
 const log = loggers.file;
 
 export async function POST(request: NextRequest) {
   try {
+    // Require authentication to prevent abuse
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
 
