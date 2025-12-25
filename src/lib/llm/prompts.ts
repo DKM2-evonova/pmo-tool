@@ -143,7 +143,8 @@ Return a JSON object matching this exact schema:
       "status": "Open|In Progress|Closed",
       "owner": {"name": "string", "email": "string or null"},
       "due_date": "YYYY-MM-DD or null",
-      "evidence": [{"quote": "Exact quote from transcript", "speaker": "Speaker name or null", "timestamp": "HH:MM:SS or null"}]
+      "evidence": [{"quote": "Exact quote from transcript", "speaker": "Speaker name or null", "timestamp": "HH:MM:SS or null"}],
+      "change_summary": "For update/close: brief explanation of what changed (e.g., 'Marked complete per team confirmation', 'Due date extended to accommodate vendor delays')"
     }
   ],
   "decisions": [
@@ -224,6 +225,34 @@ Return a JSON object matching this exact schema:
    - APPROVED: Decision was clearly approved in this meeting
    - REJECTED: Decision was explicitly rejected
 
+## Action Item Update Detection
+
+When processing existing open action items, actively look for these signals:
+
+### Status Change Indicators:
+- "We finished X" / "X is done" / "completed the work on X" / "closed out X" → operation: "close", status: "Closed"
+- "X is now in progress" / "started working on X" / "picking up X" / "making progress on X" → operation: "update", status: "In Progress"
+- "X is blocked" / "we're stuck on X" / "waiting on X" / "can't proceed with X" → operation: "update", add blocker to description
+
+### Scope/Detail Changes:
+- New requirements added to existing task → operation: "update", expand description
+- Due date mentioned ("need X by Friday", "pushed out the deadline") → operation: "update", set due_date
+- Owner reassignment ("Sarah will take over X", "handing off to John") → operation: "update", change owner
+
+### Examples:
+- "We closed out the authentication work last week" → close operation with change_summary: "Completed - confirmed in meeting"
+- "The API integration task is about 80% done" → update operation with status: "In Progress", change_summary: "Progress update: 80% complete"
+- "John finished the design review" → If design review is an existing action item, close it with change_summary: "Completed by John"
+- "We need to push the deadline for the reporting feature" → update operation with new due_date and change_summary: "Due date extended per team discussion"
+
+### change_summary Field (REQUIRED for update/close):
+For every update or close operation, provide a brief change_summary explaining what changed:
+- For close: "Completed - [evidence/reason]"
+- For status update: "Status changed to In Progress - [reason]"
+- For due date change: "Due date updated - [reason]"
+- For owner change: "Reassigned from [old] to [new] - [reason]"
+- For scope change: "Description updated to include [change] - [reason]"
+
 Return ONLY the JSON object, no additional text.`;
 }
 
@@ -239,7 +268,11 @@ function buildExistingItemsContext(
 ${actionItems
   .map(
     (ai) =>
-      `- [ID: ${ai.id}] ${ai.title} (${ai.status}) - Owner: ${ai.owner_name || 'Unassigned'}`
+      `- [ID: ${ai.id}] ${ai.title}
+    Status: ${ai.status}
+    Owner: ${ai.owner_name || 'Unassigned'}
+    Due: ${ai.due_date || 'Not set'}
+    Description: ${ai.description ? ai.description.substring(0, 100) + (ai.description.length > 100 ? '...' : '') : 'No description'}`
   )
   .join('\n')}`);
   }

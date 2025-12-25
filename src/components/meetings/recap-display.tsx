@@ -1,12 +1,12 @@
 'use client';
 
-import { 
-  FileText, 
-  TrendingUp, 
-  TrendingDown, 
-  Minus, 
-  MessageSquare, 
-  CheckSquare, 
+import {
+  FileText,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  MessageSquare,
+  CheckSquare,
   AlertCircle,
   Users,
   Calendar,
@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui';
+import { ActionItemUpdatesSection } from './recap-updates-section';
 import type { MeetingRecap, MeetingTone } from '@/types/database';
 import type { ToneLevel, EntityStatus } from '@/types/enums';
 
@@ -126,6 +127,11 @@ export function RecapDisplay({ recap, tone, showTone = false }: RecapDisplayProp
             ))}
           </div>
         </div>
+      )}
+
+      {/* Action Item Updates (changes to existing items) */}
+      {recap.action_item_updates && recap.action_item_updates.length > 0 && (
+        <ActionItemUpdatesSection updates={recap.action_item_updates} />
       )}
 
       {/* Action Items Summary */}

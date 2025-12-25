@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui';
 import { useToast } from '@/components/ui/toast';
-import { AlertTriangle, ChevronDown, ChevronUp, UserPlus } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, UserPlus, RefreshCw } from 'lucide-react';
 import { findSimilarNames, buildPeopleRoster, type PersonMatch } from '@/lib/utils/name-matching';
 import {
   EditItemModal,
@@ -65,6 +65,7 @@ export function ReviewUI({
     proposedChangeSet.proposed_items as ProposedItems
   );
   const [expandedSections, setExpandedSections] = useState({
+    action_item_updates: true,
     action_items: true,
     decisions: true,
     risks: true,
@@ -92,6 +93,15 @@ export function ReviewUI({
     () => buildOwnerOptions(projectMembers, projectContacts),
     [projectMembers, projectContacts]
   );
+
+  // Split action items by operation type
+  const { newActionItems, updatedActionItems } = useMemo(() => {
+    const newItems = proposedItems.action_items.filter((ai) => ai.operation === 'create');
+    const updatedItems = proposedItems.action_items.filter(
+      (ai) => ai.operation === 'update' || ai.operation === 'close'
+    );
+    return { newActionItems: newItems, updatedActionItems: updatedItems };
+  }, [proposedItems.action_items]);
 
   // Acquire lock when entering review mode
   const acquireLock = useCallback(async () => {
@@ -617,6 +627,10 @@ export function ReviewUI({
   }, [canPublish, saveChanges, meetingId, router, showToast]);
 
   // Section toggle handlers
+  const toggleActionItemUpdates = useCallback(() => {
+    setExpandedSections((s) => ({ ...s, action_item_updates: !s.action_item_updates }));
+  }, []);
+
   const toggleActionItems = useCallback(() => {
     setExpandedSections((s) => ({ ...s, action_items: !s.action_items }));
   }, []);
@@ -766,11 +780,60 @@ export function ReviewUI({
         </div>
       )}
 
-      {/* Action Items Section */}
+      {/* Existing Item Updates Section (update/close operations) */}
+      {updatedActionItems.length > 0 && (
+        <div className="card border-warning-200 bg-warning-50/30">
+          <button onClick={toggleActionItemUpdates} className="flex w-full items-center justify-between">
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-surface-900">
+              <RefreshCw className="h-5 w-5 text-warning-600" />
+              Existing Item Updates ({updatedActionItems.length})
+            </h2>
+            {expandedSections.action_item_updates ? (
+              <ChevronUp className="h-5 w-5 text-surface-400" />
+            ) : (
+              <ChevronDown className="h-5 w-5 text-surface-400" />
+            )}
+          </button>
+
+          <p className="mt-2 text-sm text-warning-700">
+            Changes detected to existing action items based on meeting discussion
+          </p>
+
+          {expandedSections.action_item_updates && (
+            <div className="mt-4 space-y-4">
+              {updatedActionItems.map((item) => (
+                <div key={item.temp_id} className="rounded-lg border border-warning-200 bg-white p-4">
+                  {item.change_summary && (
+                    <div className="mb-3 rounded-md bg-warning-100 p-2">
+                      <p className="text-sm font-medium text-warning-800">
+                        {item.operation === 'close' ? 'Closing: ' : 'Update: '}
+                        {item.change_summary}
+                      </p>
+                    </div>
+                  )}
+                  <ActionItemCard
+                    item={item}
+                    hasLock={hasLock}
+                    ownerOptions={ownerOptions}
+                    onToggleAccept={handleActionItemToggleAccept}
+                    onEdit={handleActionItemEdit}
+                    onReject={handleActionItemReject}
+                    onUpdateOwner={handleActionItemUpdateOwner}
+                    onAcceptAsPlaceholder={handleActionItemPlaceholder}
+                    onOpenAddContactModal={handleActionItemAddContact}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* New Action Items Section (create operations) */}
       <div className="card">
         <button onClick={toggleActionItems} className="flex w-full items-center justify-between">
           <h2 className="text-lg font-semibold text-surface-900">
-            Action Items ({proposedItems.action_items.length})
+            New Action Items ({newActionItems.length})
           </h2>
           {expandedSections.action_items ? (
             <ChevronUp className="h-5 w-5 text-surface-400" />
@@ -781,10 +844,10 @@ export function ReviewUI({
 
         {expandedSections.action_items && (
           <div className="mt-4 space-y-4">
-            {proposedItems.action_items.length === 0 ? (
-              <p className="text-surface-500">No action items extracted</p>
+            {newActionItems.length === 0 ? (
+              <p className="text-surface-500">No new action items extracted</p>
             ) : (
-              proposedItems.action_items.map((item) => (
+              newActionItems.map((item) => (
                 <ActionItemCard
                   key={item.temp_id}
                   item={item}

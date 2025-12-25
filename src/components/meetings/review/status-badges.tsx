@@ -1,14 +1,33 @@
 'use client';
 
 import { Badge } from '@/components/ui';
+import { Plus, RefreshCw, CheckCircle } from 'lucide-react';
 
 export function OperationBadge({ operation }: { operation: string }) {
-  const variants: Record<string, 'success' | 'warning' | 'default'> = {
-    create: 'success',
-    update: 'warning',
-    close: 'default',
+  const config: Record<string, { variant: 'success' | 'warning' | 'default'; label: string; icon: React.ReactNode }> = {
+    create: {
+      variant: 'success',
+      label: 'NEW',
+      icon: <Plus className="h-3 w-3" />
+    },
+    update: {
+      variant: 'warning',
+      label: 'UPDATE',
+      icon: <RefreshCw className="h-3 w-3" />
+    },
+    close: {
+      variant: 'default',
+      label: 'CLOSING',
+      icon: <CheckCircle className="h-3 w-3" />
+    },
   };
-  return <Badge variant={variants[operation] || 'default'}>{operation}</Badge>;
+  const { variant, label, icon } = config[operation] || { variant: 'default' as const, label: operation, icon: null };
+  return (
+    <Badge variant={variant} className="flex items-center gap-1">
+      {icon}
+      {label}
+    </Badge>
+  );
 }
 
 export function ResolutionStatusBadge({ status }: { status: string }) {

@@ -111,6 +111,19 @@ export interface MeetingRecap {
   key_topics: KeyTopic[];
   action_items_summary: ActionItemSummary[];
   outstanding_topics: OutstandingTopic[];
+  // Updates to existing action items detected in this meeting
+  action_item_updates?: ActionItemUpdateRecap[];
+}
+
+// Summary of action item updates for recap display
+export interface ActionItemUpdateRecap {
+  external_id: string;
+  title: string;
+  operation: 'update' | 'close';
+  change_summary: string;
+  evidence_quote: string;
+  previous_status?: string;
+  new_status?: string;
 }
 
 export interface KeyTopic {
@@ -307,6 +320,8 @@ export interface ProposedActionItem {
   accepted: boolean;
   duplicate_of: string | null;
   similarity_score: number | null;
+  // Brief explanation of what changed for update/close operations
+  change_summary?: string | null;
 }
 
 export interface ProposedDecision {

@@ -4,6 +4,32 @@ All notable changes to the PMO Tool are documented here.
 
 ---
 
+## [1.2.2] - December 25, 2025
+
+### Added
+- **Action Item Update Detection**: LLM now actively detects updates to existing action items during meeting processing
+  - Enhanced prompts with explicit detection instructions for status changes, scope updates, due date changes, and owner reassignments
+  - New `change_summary` field captures what changed for each update/close operation
+  - Examples included in prompt: "We finished X" → close, "X is now in progress" → update
+- **Existing Item Updates Section in Review UI**: Prominent orange-styled section shows detected updates
+  - Separated from new action items for better visibility
+  - Displays change summary with context about what changed
+  - Uses RefreshCw icon to distinguish from new items
+- **Action Item Updates in Published Recaps**: New section in meeting recap display
+  - Shows which existing items were updated or closed
+  - Displays operation badge (UPDATED/CLOSED), change summary, and status transition
+  - Includes evidence quote from transcript supporting the change
+- **Enhanced Operation Badges**: Status badges now include icons
+  - NEW (Plus icon, green)
+  - UPDATE (RefreshCw icon, orange)
+  - CLOSING (CheckCircle icon, gray)
+
+### Changed
+- `buildExistingItemsContext()` now includes description and due date to help LLM detect changes
+- Action items section split into "Existing Item Updates" and "New Action Items"
+
+---
+
 ## [1.2.1] - December 24, 2025
 
 ### Improved
@@ -137,6 +163,7 @@ All notable changes to the PMO Tool are documented here.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 1.2.2 | Dec 25, 2025 | Action Item update detection, enhanced review UI |
 | 1.2.1 | Dec 24, 2025 | Meeting type selector UI improvements |
 | 1.2.0 | Dec 24, 2025 | Decision Log overhaul (Smart IDs, categories, faceted filters) |
 | 1.1.1 | Dec 21, 2025 | Milestones in status reports (dashboard + Excel) |

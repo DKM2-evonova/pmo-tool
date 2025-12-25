@@ -494,6 +494,8 @@ function transformToProposedItems(
       accepted: true,
       duplicate_of: null,
       similarity_score: null,
+      // Include change summary for update/close operations
+      change_summary: ai.change_summary || null,
     };
   });
 

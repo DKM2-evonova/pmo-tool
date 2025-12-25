@@ -68,6 +68,17 @@ const OutstandingTopicSchema = z.object({
   suggested_next_steps: z.array(z.string()),
 });
 
+// Action Item Update Summary schema (for recap - tracks changes to existing items)
+const ActionItemUpdateSummarySchema = z.object({
+  external_id: z.string(),
+  title: z.string(),
+  operation: z.enum(['update', 'close']),
+  change_summary: z.string(),
+  evidence_quote: z.string(),
+  previous_status: z.string().optional(),
+  new_status: z.string().optional(),
+});
+
 // Recap schema
 const RecapSchema = z.object({
   summary: z.string(),
@@ -75,6 +86,8 @@ const RecapSchema = z.object({
   key_topics: z.array(KeyTopicSchema),
   action_items_summary: z.array(ActionItemSummarySchema),
   outstanding_topics: z.array(OutstandingTopicSchema),
+  // Updates to existing action items detected in this meeting
+  action_item_updates: z.array(ActionItemUpdateSummarySchema).optional(),
 });
 
 // Tone schema
@@ -103,6 +116,8 @@ const ActionItemSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .nullable(),
   evidence: z.array(EvidenceSchema).min(1),
+  // Brief explanation of what changed for update/close operations
+  change_summary: z.string().nullable().optional(),
 });
 
 // Decision Category enum
@@ -207,6 +222,7 @@ export type LLMFishbone = z.infer<typeof FishboneSchema>;
 export type LLMKeyTopic = z.infer<typeof KeyTopicSchema>;
 export type LLMActionItemSummary = z.infer<typeof ActionItemSummarySchema>;
 export type LLMOutstandingTopic = z.infer<typeof OutstandingTopicSchema>;
+export type LLMActionItemUpdateSummary = z.infer<typeof ActionItemUpdateSummarySchema>;
 
 // Validation function
 export function validateLLMOutput(data: unknown): {
