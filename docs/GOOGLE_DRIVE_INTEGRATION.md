@@ -126,6 +126,18 @@ From there, you can:
 2. Review the transcript
 3. Process the meeting to extract action items, decisions, and risks
 
+### Processing Auto-Imported Meetings
+
+Unlike manually uploaded meetings, auto-imported meetings require an additional step:
+
+1. **Select Meeting Category**: When you open an auto-imported meeting for processing, you'll be prompted to select a category (Project, Governance, Discovery, Alignment, or Remediation)
+2. **AI Processing**: After selecting the category, the AI will analyze the transcript based on that meeting type
+3. **Review & Publish**: Review the extracted items and publish when ready
+
+If processing fails, you have two options:
+- **Retry Processing**: Try again with the same category
+- **Reset & Change Category**: Clear the category and select a different one (useful if the wrong category was selected)
+
 ## Architecture
 
 ### Database Tables
@@ -213,3 +225,11 @@ In production:
 | PDF | `application/pdf` | Text extracted from PDF |
 | TXT | `text/plain` | Plain text files |
 | RTF | `application/rtf` | Rich text format |
+
+### Google Docs with Tabs (Gemini Notes)
+
+Google Gemini saves meeting notes as Google Docs with multiple tabs:
+- **Tab 1**: Meeting summary
+- **Tab 2**: Full transcript
+
+When exported, all tabs are combined into a single text output. The AI processor handles this combined content and extracts the relevant information from both the summary and transcript sections.

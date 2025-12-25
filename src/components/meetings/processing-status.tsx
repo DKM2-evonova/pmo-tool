@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, CheckCircle, XCircle, AlertTriangle, Sparkles } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import { Loader2, CheckCircle, XCircle, AlertTriangle, Sparkles, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui';
 
 interface ProcessingStatusProps {
@@ -114,11 +115,19 @@ export function ProcessingStatus({
       return;
     }
 
-    const processTranscript = async () => {
+    // Small delay to ensure component is fully mounted
+    const startProcessing = setTimeout(() => {
+      processTranscript();
+    }, 100);
+
+    async function processTranscript() {
       try {
         // Update meeting status to Processing
         setCurrentStep('loading_context');
         setProgress(10);
+
+        // Small delay to show the loading step
+        await new Promise((r) => setTimeout(r, 300));
 
         // Call the processing API with timeout
         setCurrentStep('processing');
@@ -177,17 +186,18 @@ export function ProcessingStatus({
         }
         setError(errorMessage);
       }
-    };
+    }
 
-    processTranscript();
-
-    // Cleanup: cancel redirect timeout if component unmounts
+    // Cleanup: cancel timeouts if component unmounts
     return () => {
+      clearTimeout(startProcessing);
       if (redirectTimeoutRef.current) {
         clearTimeout(redirectTimeoutRef.current);
       }
     };
   }, [meetingId, initialStatus, router]);
+
+  const [isResetting, setIsResetting] = useState(false);
 
   const handleRetry = () => {
     setError(null);
@@ -196,6 +206,30 @@ export function ProcessingStatus({
     setAiSubstageIndex(0);
     // Re-trigger processing
     router.refresh();
+  };
+
+  const handleResetAndChangeCategory = async () => {
+    setIsResetting(true);
+    try {
+      const supabase = createClient();
+      // Reset meeting to Draft and clear the category so user can re-select
+      const { error } = await supabase
+        .from('meetings')
+        .update({
+          status: 'Draft',
+          category: null,
+          error_message: null
+        })
+        .eq('id', meetingId);
+
+      if (error) throw error;
+
+      // Refresh to show category selection
+      router.refresh();
+    } catch (err) {
+      console.error('Failed to reset meeting:', err);
+      setIsResetting(false);
+    }
   };
 
   return (
@@ -306,9 +340,21 @@ export function ProcessingStatus({
               <p className="mt-1 text-sm text-danger-600">{error}</p>
             </div>
           </div>
-          <div className="mt-4 flex gap-3">
+          <div className="mt-4 flex flex-wrap gap-3">
             <Button variant="danger" onClick={handleRetry}>
               Retry Processing
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={handleResetAndChangeCategory}
+              disabled={isResetting}
+            >
+              {isResetting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RotateCcw className="mr-2 h-4 w-4" />
+              )}
+              Reset & Change Category
             </Button>
             <Button
               variant="ghost"
