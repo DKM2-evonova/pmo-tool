@@ -763,13 +763,38 @@ export async function POST(
     return NextResponse.json({ success: true });
   } catch (error) {
     const durationMs = Date.now() - startTime;
+
+    // Extract error details - handle both Error objects and Supabase error objects
+    let errorMessage = 'Unknown error';
+    let errorDetails: Record<string, unknown> = {};
+
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      errorDetails = {
+        name: error.name,
+        stack: error.stack?.substring(0, 500),
+      };
+    } else if (error && typeof error === 'object') {
+      // Supabase errors and other object errors
+      errorMessage = (error as { message?: string }).message || JSON.stringify(error);
+      errorDetails = error as Record<string, unknown>;
+    }
+
     log.error('Meeting publish failed', {
       durationMs,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      errorStack: error instanceof Error ? error.stack?.substring(0, 500) : undefined,
+      error: errorMessage,
+      errorDetails,
     });
+
+    // Also log to console for immediate visibility
+    console.error('[PUBLISH ERROR]', {
+      message: errorMessage,
+      details: errorDetails,
+      rawError: error,
+    });
+
     return NextResponse.json(
-      { error: 'Publish failed: ' + (error as Error).message },
+      { error: 'Publish failed: ' + errorMessage },
       { status: 500 }
     );
   }

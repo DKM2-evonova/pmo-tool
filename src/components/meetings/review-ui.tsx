@@ -620,8 +620,33 @@ export function ReviewUI({
       router.push(`/meetings/${meetingId}`);
       router.refresh();
     } catch (error) {
-      clientLog.error('Publish failed', { error: error instanceof Error ? error.message : 'Unknown error' });
-      showToast('Failed to publish: ' + (error as Error).message, 'error');
+      // Aggressive error debugging
+      console.log('[PUBLISH DEBUG] Error type:', typeof error);
+      console.log('[PUBLISH DEBUG] Error constructor:', (error as object)?.constructor?.name);
+      console.log('[PUBLISH DEBUG] Is Error instance:', error instanceof Error);
+      console.log('[PUBLISH DEBUG] Error keys:', error ? Object.keys(error as object) : 'null/undefined');
+      try {
+        console.log('[PUBLISH DEBUG] Error stringified:', JSON.stringify(error, null, 2));
+      } catch {
+        console.log('[PUBLISH DEBUG] Could not stringify error');
+      }
+      console.log('[PUBLISH DEBUG] Raw error:', error);
+
+      // Better error extraction
+      let errorMessage = 'Unknown error';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        console.log('[PUBLISH DEBUG] Extracted from Error.message:', errorMessage);
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = String((error as { message: unknown }).message);
+        console.log('[PUBLISH DEBUG] Extracted from object.message:', errorMessage);
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+        console.log('[PUBLISH DEBUG] Error is string:', errorMessage);
+      }
+
+      clientLog.error('Publish failed', { error: errorMessage });
+      showToast('Failed to publish: ' + errorMessage, 'error');
     } finally {
       setIsPublishing(false);
     }
