@@ -103,7 +103,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       value: openActionItems,
       total: actionItems.data?.length || 0,
       icon: CheckSquare,
-      href: `/projects/${projectId}/action-items`,
+      href: `/action-items?project=${projectId}`,
       color: 'bg-primary-50 text-primary-600',
     },
     {
@@ -111,21 +111,21 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       value: openRisks,
       total: risks.data?.length || 0,
       icon: AlertTriangle,
-      href: `/projects/${projectId}/risks`,
+      href: `/risks?project=${projectId}`,
       color: 'bg-warning-50 text-warning-600',
     },
     {
       name: 'Decisions',
       value: decisions.data?.length || 0,
       icon: FileText,
-      href: `/projects/${projectId}/decisions`,
+      href: `/decisions?project=${projectId}`,
       color: 'bg-success-50 text-success-600',
     },
     {
       name: 'Meetings',
       value: meetings.data?.length || 0,
       icon: Calendar,
-      href: `/projects/${projectId}/meetings`,
+      href: `/meetings?project=${projectId}`,
       color: 'bg-surface-100 text-surface-600',
     },
   ];
@@ -193,7 +193,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
               Recent Meetings
             </h2>
             <Link
-              href={`/projects/${projectId}/meetings`}
+              href={`/meetings?project=${projectId}`}
               className="text-sm text-primary-600 hover:text-primary-700"
             >
               View all

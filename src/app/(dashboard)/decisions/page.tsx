@@ -121,10 +121,8 @@ export default async function DecisionsPage({
     .select(
       `
       *,
-      decision_maker:profiles!decisions_decision_maker_user_id_fkey(id, full_name, email, avatar_url),
       project:projects(id, name),
-      source_meeting:meetings(id, title, date),
-      superseded_by:decisions!decisions_superseded_by_id_fkey(smart_id)
+      source_meeting:meetings(id, title, date)
     `
     )
     .in('project_id', projectIds.length > 0 ? projectIds : ['none']);
