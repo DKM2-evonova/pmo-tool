@@ -198,3 +198,24 @@ export function isValidUUID(id: string): boolean {
   return UUID_REGEX.test(id);
 }
 
+/**
+ * Parses an updates array from database, handling both TEXT (JSON string) and JSONB formats
+ * This is needed because the updates column type has varied between migrations.
+ * Returns an empty array for null, undefined, or malformed data.
+ */
+export function parseUpdatesArray<T = unknown>(updates: string | T[] | null | undefined): T[] {
+  if (!updates) return [];
+  // Already an array (JSONB from database)
+  if (Array.isArray(updates)) return updates;
+  // String (TEXT from database) - parse as JSON
+  if (typeof updates === 'string') {
+    try {
+      const parsed = JSON.parse(updates);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+

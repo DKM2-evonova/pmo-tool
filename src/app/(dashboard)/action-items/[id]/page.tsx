@@ -1,7 +1,7 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import { ActionItemDetail } from './action-item-detail';
-import { loggers } from '@/lib/logger';
+import { parseUpdatesArray } from '@/lib/utils';
 import type { ActionItemUpdate } from '@/types/database';
 
 interface ActionItemPageProps {
@@ -55,21 +55,8 @@ export default async function ActionItemPage({ params }: ActionItemPageProps) {
         email: m.profile.email,
       })) || [];
 
-  // Handle updates - JSONB columns are returned as JavaScript objects by Supabase
-  let updatesArray: ActionItemUpdate[] = [];
-  if (Array.isArray(actionItem.updates)) {
-    // JSONB is already parsed by Supabase
-    updatesArray = actionItem.updates;
-  } else if (typeof actionItem.updates === 'string' && actionItem.updates) {
-    // Fallback for legacy string data
-    try {
-      const parsed = JSON.parse(actionItem.updates);
-      updatesArray = Array.isArray(parsed) ? parsed : [];
-    } catch (e) {
-      loggers.api.warn('Failed to parse updates JSON', { error: e instanceof Error ? e.message : 'Unknown error' });
-      updatesArray = [];
-    }
-  }
+  // Parse updates array (handles both TEXT and JSONB formats)
+  const updatesArray = parseUpdatesArray<ActionItemUpdate>(actionItem.updates);
 
   const actionItemWithUpdates = {
     ...actionItem,

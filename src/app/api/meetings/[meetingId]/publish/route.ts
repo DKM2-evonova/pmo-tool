@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { generateEmbedding } from '@/lib/embeddings/client';
 import { loggers } from '@/lib/logger';
+import { parseUpdatesArray } from '@/lib/utils';
 import type {
   ProposedActionItem,
   ProposedDecision,
@@ -105,26 +106,6 @@ function createAIUpdateComment(params: AIUpdateParams): ActionItemUpdate | RiskU
     meeting_title: meetingTitle || 'Untitled Meeting',
     evidence_quote: evidenceQuote,
   };
-}
-
-/**
- * Parses the existing updates array from an item, handling null/malformed data
- * Handles both TEXT (JSON string) and JSONB (already parsed object) formats for compatibility
- */
-function parseExistingUpdates(updates: string | unknown[] | null | undefined): unknown[] {
-  if (!updates) return [];
-  // Already an array (JSONB from database)
-  if (Array.isArray(updates)) return updates;
-  // String (TEXT from database) - parse as JSON
-  if (typeof updates === 'string') {
-    try {
-      const parsed = JSON.parse(updates);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-  return [];
 }
 
 export async function POST(
@@ -498,7 +479,7 @@ export async function POST(
           publisherName,
         });
 
-        const currentUpdates = parseExistingUpdates(
+        const currentUpdates = parseUpdatesArray(
           (existing as Record<string, unknown>).updates as string | unknown[] | null | undefined
         );
         currentUpdates.push(aiUpdate);
@@ -537,7 +518,7 @@ export async function POST(
           publisherName,
         });
 
-        const currentUpdates = parseExistingUpdates(
+        const currentUpdates = parseUpdatesArray(
           (existing as Record<string, unknown>).updates as string | unknown[] | null | undefined
         );
         currentUpdates.push(aiUpdate);
@@ -664,7 +645,7 @@ export async function POST(
           publisherName,
         });
 
-        const currentUpdates = parseExistingUpdates(
+        const currentUpdates = parseUpdatesArray(
           (existing as Record<string, unknown>).updates as string | unknown[] | null | undefined
         );
         currentUpdates.push(aiUpdate);

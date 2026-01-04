@@ -1,7 +1,7 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import { RiskDetail } from './risk-detail';
-import { loggers } from '@/lib/logger';
+import { parseUpdatesArray } from '@/lib/utils';
 import type { RiskUpdate } from '@/types/database';
 
 interface RiskPageProps {
@@ -55,21 +55,8 @@ export default async function RiskPage({ params }: RiskPageProps) {
         email: m.profile.email,
       })) || [];
 
-  // Handle updates - JSONB columns are returned as JavaScript objects by Supabase
-  let updatesArray: RiskUpdate[] = [];
-  if (Array.isArray(risk.updates)) {
-    // JSONB is already parsed by Supabase
-    updatesArray = risk.updates;
-  } else if (typeof risk.updates === 'string' && risk.updates) {
-    // Fallback for legacy string data
-    try {
-      const parsed = JSON.parse(risk.updates);
-      updatesArray = Array.isArray(parsed) ? parsed : [];
-    } catch (e) {
-      loggers.api.warn('Failed to parse updates JSON', { error: e instanceof Error ? e.message : 'Unknown error' });
-      updatesArray = [];
-    }
-  }
+  // Parse updates array (handles both TEXT and JSONB formats)
+  const updatesArray = parseUpdatesArray<RiskUpdate>(risk.updates);
 
   const riskWithUpdates = {
     ...risk,
