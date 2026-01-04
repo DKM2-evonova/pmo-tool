@@ -18,6 +18,8 @@ import {
   Loader2,
   Calendar,
   X,
+  FileText,
+  AlertCircle,
 } from 'lucide-react';
 import type { MeetingCategory } from '@/types/enums';
 import type { MeetingAttendee } from '@/types/database';
@@ -46,6 +48,14 @@ export function MeetingIngestion({
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [selectedCalendarEvent, setSelectedCalendarEvent] = useState<CalendarEvent | null>(null);
 
+  // Drive transcript fetch state
+  const [isFetchingTranscript, setIsFetchingTranscript] = useState(false);
+  const [transcriptFetchResult, setTranscriptFetchResult] = useState<{
+    found: boolean;
+    message?: string;
+    fileName?: string;
+  } | null>(null);
+
   // Form data
   const [projectId, setProjectId] = useState(preselectedProjectId || '');
   const [title, setTitle] = useState('');
@@ -72,10 +82,11 @@ export function MeetingIngestion({
   }, []);
 
   // Handle calendar event selection
-  const handleCalendarEventSelect = (event: CalendarEvent) => {
+  const handleCalendarEventSelect = async (event: CalendarEvent) => {
     setSelectedCalendarEvent(event);
     setTitle(event.title);
-    setDate(event.startTime.split('T')[0]);
+    const eventDate = event.startTime.split('T')[0];
+    setDate(eventDate);
 
     // Convert calendar attendees to meeting attendees
     const meetingAttendees: MeetingAttendee[] = event.attendees.map((a) => ({
@@ -85,6 +96,49 @@ export function MeetingIngestion({
     setAttendees(meetingAttendees);
 
     setShowCalendarPicker(false);
+    setTranscriptFetchResult(null);
+
+    // If it's a Google Meet event, try to fetch transcript from Drive
+    if (event.isGoogleMeet) {
+      setIsFetchingTranscript(true);
+      try {
+        const response = await fetch('/api/google/drive/meet-transcript', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: event.title,
+            date: eventDate,
+            meetingId: event.id,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.found && data.transcript) {
+          setTranscriptText(data.transcript);
+          setTranscriptFetchResult({
+            found: true,
+            fileName: data.file?.name,
+          });
+          showToast('Transcript automatically imported from Google Drive!', 'success');
+        } else {
+          setTranscriptFetchResult({
+            found: false,
+            message: data.message || 'No matching transcript found',
+          });
+        }
+      } catch (error) {
+        clientLog.error('Failed to fetch transcript from Drive', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        setTranscriptFetchResult({
+          found: false,
+          message: 'Failed to search for transcript',
+        });
+      } finally {
+        setIsFetchingTranscript(false);
+      }
+    }
   };
 
   // Clear calendar selection
@@ -93,6 +147,8 @@ export function MeetingIngestion({
     setTitle('');
     setDate(new Date().toISOString().split('T')[0]);
     setAttendees([]);
+    setTranscriptText('');
+    setTranscriptFetchResult(null);
   };
 
   const canProceed = () => {
@@ -271,26 +327,51 @@ export function MeetingIngestion({
                 {isCalendarConnected && (
                   <div className="rounded-lg border border-surface-200 bg-surface-50 p-4">
                     {selectedCalendarEvent ? (
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Calendar className="h-5 w-5 text-primary-600" />
-                          <div>
-                            <p className="font-medium text-surface-900">
-                              Imported from Calendar
-                            </p>
-                            <p className="text-sm text-surface-500">
-                              {selectedCalendarEvent.title} - {selectedCalendarEvent.attendees.length} attendees
-                            </p>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Calendar className="h-5 w-5 text-primary-600" />
+                            <div>
+                              <p className="font-medium text-surface-900">
+                                Imported from Calendar
+                              </p>
+                              <p className="text-sm text-surface-500">
+                                {selectedCalendarEvent.title} - {selectedCalendarEvent.attendees.length} attendees
+                              </p>
+                            </div>
                           </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleClearCalendarSelection}
+                          >
+                            <X className="h-4 w-4" />
+                            Clear
+                          </Button>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleClearCalendarSelection}
-                        >
-                          <X className="h-4 w-4" />
-                          Clear
-                        </Button>
+                        {/* Transcript fetch status */}
+                        {selectedCalendarEvent.isGoogleMeet && (
+                          <div className="ml-8 border-l-2 border-surface-200 pl-3">
+                            {isFetchingTranscript ? (
+                              <div className="flex items-center gap-2 text-sm text-surface-500">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Searching for transcript in Google Drive...
+                              </div>
+                            ) : transcriptFetchResult ? (
+                              transcriptFetchResult.found ? (
+                                <div className="flex items-center gap-2 text-sm text-success-600">
+                                  <FileText className="h-4 w-4" />
+                                  Transcript imported: {transcriptFetchResult.fileName}
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 text-sm text-surface-500">
+                                  <AlertCircle className="h-4 w-4" />
+                                  {transcriptFetchResult.message}
+                                </div>
+                              )
+                            ) : null}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="flex items-center justify-between">

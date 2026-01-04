@@ -149,6 +149,15 @@ export function CalendarEventPicker({ onSelect, onCancel }: CalendarEventPickerP
           Select a Meeting
         </h3>
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={fetchEvents}
+            disabled={isLoading}
+            title="Refresh calendar events"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
           <span className="text-sm text-surface-500">Show past</span>
           <select
             value={daysBack}

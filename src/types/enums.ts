@@ -121,9 +121,7 @@ export const DecisionCategory = {
   GovernanceCompliance: 'GOVERNANCE_COMPLIANCE',
   StrategyCommercial: 'STRATEGY_COMMERCIAL',
 } as const;
-export type DecisionCategory = (typeof DecisionCategory)[keyof typeof DecisionCategory];
-
-// Category prefix mapping for Smart IDs
+export type DecisionCategory = (typeof DecisionCategory)[keyof typeof DecisionCategory];// Category prefix mapping for Smart IDs
 export const DecisionCategoryPrefix: Record<DecisionCategory, string> = {
   [DecisionCategory.ProcessOpModel]: 'PROC',
   [DecisionCategory.TechnologySystems]: 'TECH',
@@ -195,4 +193,3 @@ export const DecisionSource = {
   Manual: 'manual',
 } as const;
 export type DecisionSource = (typeof DecisionSource)[keyof typeof DecisionSource];
-

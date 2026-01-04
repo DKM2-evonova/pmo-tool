@@ -21,19 +21,19 @@ export type LLMModel = 'gemini-3-pro-preview' | 'gpt-5.2' | 'gemini-2.0-flash';
 export const LLM_SETTINGS = {
   // Primary model (Gemini 3 Pro) settings
   gemini: {
-    maxOutputTokens: 8192, // Allows complete extraction of all items with evidence
+    maxOutputTokens: 32768, // High limit to never truncate - quality over cost
     temperature: 0.3, // Low for consistent, structured JSON output
     topP: 0.95, // Slightly reduced to focus on higher-probability tokens
     topK: 40, // Limits vocabulary for more consistent output
   },
   // Fallback model (OpenAI) settings
   openai: {
-    maxTokens: 8192, // Match Gemini for consistency
+    maxTokens: 32768, // Match Gemini for consistency
     temperature: 0.3, // Low for structured output
   },
   // Utility model (Gemini 2.0 Flash) settings - for JSON repair
   geminiFlash: {
-    maxOutputTokens: 16384, // Large enough to handle full meeting JSON repair
+    maxOutputTokens: 32768, // Match primary model for consistency
     temperature: 0.1, // Very low for deterministic JSON output
   },
 } as const;
