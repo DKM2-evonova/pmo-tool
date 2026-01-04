@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { loggers } from '@/lib/logger';
 import { isValidUUID } from '@/lib/utils';
 import { EntityStatus, RiskSeverity } from '@/types/enums';
+import type { RiskUpdate } from '@/types/database';
 
 const log = loggers.api;
 
@@ -15,14 +16,6 @@ interface UpdateRequest {
   mitigation?: string;
   status?: string;
   owner_user_id?: string;
-}
-
-interface StatusUpdate {
-  id: string;
-  content: string;
-  created_at: string;
-  created_by_user_id: string;
-  created_by_name: string;
 }
 
 interface UpdateRiskData {
@@ -139,7 +132,7 @@ export async function POST(
       }
 
       // Extract the newly added update from the result
-      const updates = updatedUpdates as StatusUpdate[];
+      const updates = updatedUpdates as RiskUpdate[];
       const update = updates[updates.length - 1];
 
       return NextResponse.json({ success: true, update });

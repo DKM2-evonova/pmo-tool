@@ -2,17 +2,10 @@ import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import { ActionItemDetail } from './action-item-detail';
 import { loggers } from '@/lib/logger';
+import type { ActionItemUpdate } from '@/types/database';
 
 interface ActionItemPageProps {
   params: Promise<{ id: string }>;
-}
-
-interface StatusUpdate {
-  id: string;
-  content: string;
-  created_at: string;
-  created_by_user_id: string;
-  created_by_name: string;
 }
 
 export default async function ActionItemPage({ params }: ActionItemPageProps) {
@@ -63,7 +56,7 @@ export default async function ActionItemPage({ params }: ActionItemPageProps) {
       })) || [];
 
   // Handle updates - JSONB columns are returned as JavaScript objects by Supabase
-  let updatesArray: StatusUpdate[] = [];
+  let updatesArray: ActionItemUpdate[] = [];
   if (Array.isArray(actionItem.updates)) {
     // JSONB is already parsed by Supabase
     updatesArray = actionItem.updates;

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { loggers } from '@/lib/logger';
 import { isValidUUID } from '@/lib/utils';
 import { EntityStatus } from '@/types/enums';
+import type { ActionItemUpdate } from '@/types/database';
 
 const log = loggers.api;
 
@@ -13,14 +14,6 @@ interface UpdateRequest {
   status?: string;
   owner_user_id?: string;
   due_date?: string;
-}
-
-interface StatusUpdate {
-  id: string;
-  content: string;
-  created_at: string;
-  created_by_user_id: string;
-  created_by_name: string;
 }
 
 interface UpdateActionItemData {
@@ -135,7 +128,7 @@ export async function POST(
       }
 
       // Extract the newly added update from the result
-      const updates = updatedUpdates as StatusUpdate[];
+      const updates = updatedUpdates as ActionItemUpdate[];
       const update = updates[updates.length - 1];
 
       return NextResponse.json({ success: true, update });

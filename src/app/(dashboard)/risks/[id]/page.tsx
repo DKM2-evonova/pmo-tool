@@ -2,17 +2,10 @@ import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import { RiskDetail } from './risk-detail';
 import { loggers } from '@/lib/logger';
+import type { RiskUpdate } from '@/types/database';
 
 interface RiskPageProps {
   params: Promise<{ id: string }>;
-}
-
-interface StatusUpdate {
-  id: string;
-  content: string;
-  created_at: string;
-  created_by_user_id: string;
-  created_by_name: string;
 }
 
 export default async function RiskPage({ params }: RiskPageProps) {
@@ -63,7 +56,7 @@ export default async function RiskPage({ params }: RiskPageProps) {
       })) || [];
 
   // Handle updates - JSONB columns are returned as JavaScript objects by Supabase
-  let updatesArray: StatusUpdate[] = [];
+  let updatesArray: RiskUpdate[] = [];
   if (Array.isArray(risk.updates)) {
     // JSONB is already parsed by Supabase
     updatesArray = risk.updates;

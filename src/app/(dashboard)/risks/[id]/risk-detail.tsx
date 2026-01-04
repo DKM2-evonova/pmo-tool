@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/client';
 import { Button, Badge, Input, Select } from '@/components/ui';
 import { formatDateReadable, getInitials, calculateRiskSeverity, cn } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
@@ -52,7 +51,6 @@ interface RiskDetailProps {
 
 export function RiskDetail({ risk: initialRisk, projectMembers, currentUserId }: RiskDetailProps) {
   const router = useRouter();
-  const supabase = createClient();
   const { showToast } = useToast();
   const [risk, setRisk] = useState(initialRisk);
   const [editing, setEditing] = useState(false);

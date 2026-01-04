@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/client';
 import { Button, Badge, Input, Select } from '@/components/ui';
 import { formatDateReadable, isOverdue, getInitials, cn } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
@@ -52,7 +51,6 @@ interface ActionItemDetailProps {
 
 export function ActionItemDetail({ actionItem: initialActionItem, projectMembers, currentUserId }: ActionItemDetailProps) {
   const router = useRouter();
-  const supabase = createClient();
   const { showToast } = useToast();
   const [actionItem, setActionItem] = useState(initialActionItem);
   const [editing, setEditing] = useState(false);
