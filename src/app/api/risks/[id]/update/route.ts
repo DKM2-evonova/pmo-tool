@@ -106,60 +106,41 @@ export async function POST(
     if (content) {
       log.debug('Adding status update for risk', { riskId: id });
 
-      // Use already-fetched userProfile instead of making another query
-      log.debug('User profile retrieved', { userId: user.id, hasProfile: !!userProfile });
+      const updateId = crypto.randomUUID();
+      const createdByName = userProfile?.full_name || 'Unknown';
 
-      // Get current risk
-      const { data: risk, error: fetchError } = await serviceSupabase
-        .from('risks')
-        .select('updates')
-        .eq('id', id)
-        .single();
-
-      log.debug('Risk fetch result', { riskId: id, hasData: !!risk, hasError: !!fetchError });
-
-      if (fetchError || !risk) {
-        log.warn('Risk not found for status update', { riskId: id, error: fetchError?.message });
-        return NextResponse.json({ error: 'Risk not found' }, { status: 404 });
-      }
-
-      // Create the update
-      const update = {
-        id: crypto.randomUUID(),
-        content: content.trim(),
-        created_at: new Date().toISOString(),
-        created_by_user_id: user.id,
-        created_by_name: userProfile?.full_name || 'Unknown',
-      };
-
-      // Update the risk - handle both TEXT (JSON string) and JSONB formats
-      let currentUpdates: StatusUpdate[] = [];
-      if (risk.updates) {
-        if (Array.isArray(risk.updates)) {
-          // JSONB format - already parsed
-          currentUpdates = risk.updates as StatusUpdate[];
-        } else if (typeof risk.updates === 'string') {
-          // TEXT format - needs parsing
-          try {
-            const parsedUpdates = JSON.parse(risk.updates);
-            currentUpdates = Array.isArray(parsedUpdates) ? parsedUpdates : [];
-          } catch (parseError) {
-            log.warn('Failed to parse risk updates', { riskId: id, error: parseError instanceof Error ? parseError.message : 'Parse error' });
-            currentUpdates = [];
-          }
+      // Use atomic database function to prevent race conditions
+      const { data: updatedUpdates, error: updateError } = await serviceSupabase.rpc(
+        'append_risk_update',
+        {
+          p_risk_id: id,
+          p_update_id: updateId,
+          p_content: content.trim(),
+          p_created_by_user_id: user.id,
+          p_created_by_name: createdByName,
         }
-      }
-      const updatedUpdates = [...currentUpdates, update];
-
-      const { error: updateError } = await serviceSupabase
-        .from('risks')
-        .update({ updates: JSON.stringify(updatedUpdates) })
-        .eq('id', id);
+      );
 
       if (updateError) {
-        log.error('Failed to add status update', { riskId: id, error: updateError.message });
-        return NextResponse.json({ error: 'Failed to add status update' }, { status: 500 });
+        log.error('Failed to add status update', {
+          riskId: id,
+          error: updateError.message,
+          code: updateError.code,
+          details: updateError.details,
+          hint: updateError.hint,
+          fullError: JSON.stringify(updateError)
+        });
+
+        // Check if it's a "not found" error
+        if (updateError.message.includes('not found')) {
+          return NextResponse.json({ error: 'Risk not found' }, { status: 404 });
+        }
+        return NextResponse.json({ error: `Failed to add status update: ${updateError.message}` }, { status: 500 });
       }
+
+      // Extract the newly added update from the result
+      const updates = updatedUpdates as StatusUpdate[];
+      const update = updates[updates.length - 1];
 
       return NextResponse.json({ success: true, update });
     }
