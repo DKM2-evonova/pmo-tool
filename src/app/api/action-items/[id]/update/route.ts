@@ -118,13 +118,20 @@ export async function POST(
       );
 
       if (updateError) {
-        log.error('Failed to add status update', { actionItemId: id, error: updateError.message });
+        log.error('Failed to add status update', {
+          actionItemId: id,
+          error: updateError.message,
+          code: updateError.code,
+          details: updateError.details,
+          hint: updateError.hint,
+          fullError: JSON.stringify(updateError)
+        });
 
         // Check if it's a "not found" error
         if (updateError.message.includes('not found')) {
           return NextResponse.json({ error: 'Action item not found' }, { status: 404 });
         }
-        return NextResponse.json({ error: 'Failed to add status update' }, { status: 500 });
+        return NextResponse.json({ error: `Failed to add status update: ${updateError.message}` }, { status: 500 });
       }
 
       // Extract the newly added update from the result
