@@ -4,7 +4,11 @@ An AI-powered Project Management Office tool that converts meeting transcripts i
 
 ## Overview
 
-The PMO Tool is an automation layer that sits on top of an organization's existing work management ecosystem. It converts meeting conversations into structured project data (action items, risks/issues, decisions, recaps, tone) and reusable artifacts, reducing the time Project Consultants and Program/Portfolio Managers spend on 'work about work'.
+The PMO Tool is a full-stack project management office solution built with **Next.js 16**, **React 18**, **TypeScript**, and **Supabase**. The codebase comprises approximately **38,800 lines of code** across **192 TypeScript/TSX files**, organized into **12 component modules** and **11 API route groups**. The database schema has evolved through **40 migrations**, reflecting significant feature maturity.
+
+The application serves as an automation layer that sits on top of an organization's existing work management ecosystem. It converts meeting conversations into structured project data (action items, risks/issues, decisions, recaps, tone) and reusable artifacts, reducing the time Project Consultants and Program/Portfolio Managers spend on 'work about work'.
+
+Key capabilities include meeting management with AI-powered processing (via OpenAI and Google GenAI), action item tracking with Kanban boards, decision logging, risk management, and Google Calendar/Drive integration. The application supports document ingestion (PDF, DOCX) and multi-format exports (PDF, Word, Excel). The UI is styled with **Tailwind CSS** using a custom Liquid Glass design system with primitives like modals, tooltips, and badges.
 
 **Core Loop**: Ingest (Transcript) → Interpret (LLM) → Action (Structured Data)
 
