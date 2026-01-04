@@ -67,7 +67,6 @@ export default async function ActionItemPage({ params }: ActionItemPageProps) {
     <ActionItemDetail
       actionItem={actionItemWithUpdates}
       projectMembers={projectMembers}
-      currentUserId={user.id}
     />
   );
 }

@@ -67,7 +67,6 @@ export default async function RiskPage({ params }: RiskPageProps) {
     <RiskDetail
       risk={riskWithUpdates}
       projectMembers={projectMembers}
-      currentUserId={user.id}
     />
   );
 }

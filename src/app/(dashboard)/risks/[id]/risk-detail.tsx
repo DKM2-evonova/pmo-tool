@@ -46,10 +46,9 @@ interface RiskDetailProps {
     source_meeting?: { id: string; title: string } | null;
   };
   projectMembers: Array<{ id: string; full_name: string; email: string }>;
-  currentUserId: string;
 }
 
-export function RiskDetail({ risk: initialRisk, projectMembers, currentUserId }: RiskDetailProps) {
+export function RiskDetail({ risk: initialRisk, projectMembers }: RiskDetailProps) {
   const router = useRouter();
   const { showToast } = useToast();
   const [risk, setRisk] = useState(initialRisk);

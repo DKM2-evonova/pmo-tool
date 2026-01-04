@@ -46,10 +46,9 @@ interface ActionItemDetailProps {
     source_meeting?: { id: string; title: string } | null;
   };
   projectMembers: Array<{ id: string; full_name: string; email: string }>;
-  currentUserId: string;
 }
 
-export function ActionItemDetail({ actionItem: initialActionItem, projectMembers, currentUserId }: ActionItemDetailProps) {
+export function ActionItemDetail({ actionItem: initialActionItem, projectMembers }: ActionItemDetailProps) {
   const router = useRouter();
   const { showToast } = useToast();
   const [actionItem, setActionItem] = useState(initialActionItem);
