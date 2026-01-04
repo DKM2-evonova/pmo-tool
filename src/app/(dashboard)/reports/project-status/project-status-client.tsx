@@ -96,6 +96,7 @@ export function ProjectStatusClient({ projects }: ProjectStatusClientProps) {
 
         {reportData && (
           <StatusReportExport
+            projectId={reportData.project.id}
             projectName={reportData.project.name}
             actionItems={reportData.actionItems}
             risks={reportData.risks}

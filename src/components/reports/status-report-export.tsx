@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Download, ChevronDown, FileSpreadsheet, FileText, Loader2 } from 'lucide-react';
+import { Download, ChevronDown, FileSpreadsheet, FileText, Loader2, Sparkles } from 'lucide-react';
 import { generateProjectStatusPDF } from '@/lib/export/project-status-report';
 import { generateProjectStatusExcel } from '@/lib/export/project-status-excel';
 import { useToast } from '@/components/ui/toast';
@@ -9,6 +9,7 @@ import { clientLog } from '@/lib/client-logger';
 import type { ActionItemWithOwner, RiskWithOwner, DecisionWithMaker, MilestoneWithPredecessor } from '@/types/database';
 
 interface StatusReportExportProps {
+  projectId: string;
   projectName: string;
   actionItems: ActionItemWithOwner[];
   risks: RiskWithOwner[];
@@ -18,6 +19,7 @@ interface StatusReportExportProps {
 }
 
 export function StatusReportExport({
+  projectId,
   projectName,
   actionItems,
   risks,
@@ -27,6 +29,7 @@ export function StatusReportExport({
 }: StatusReportExportProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isExporting, setIsExporting] = useState<'pdf' | 'excel' | null>(null);
+  const [exportPhase, setExportPhase] = useState<'summary' | 'pdf' | null>(null);
   const { showToast } = useToast();
 
   const handleExport = async (format: 'pdf' | 'excel') => {
@@ -38,6 +41,45 @@ export function StatusReportExport({
       const sanitizedProjectName = projectName.replace(/[^a-zA-Z0-9]/g, '_');
       const filename = `${sanitizedProjectName}_Status_Report_${timestamp}`;
 
+      let executiveSummary: string | undefined;
+
+      // For PDF exports, generate AI executive summary first
+      if (format === 'pdf') {
+        setExportPhase('summary');
+        try {
+          const response = await fetch('/api/reports/executive-summary', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            executiveSummary = data.summary;
+            clientLog.info('Executive summary generated', {
+              model: data.model,
+              latencyMs: data.latencyMs,
+              summaryLength: data.summary?.length || 0,
+            });
+          } else {
+            // Log the failure but continue without summary
+            const errorData = await response.json().catch(() => ({}));
+            clientLog.warn('Executive summary generation failed', {
+              status: response.status,
+              error: errorData.error || 'Unknown error',
+            });
+            showToast('Could not generate AI summary. Exporting report without summary.', 'warning');
+          }
+        } catch (summaryError) {
+          // Log but don't fail - proceed without summary
+          clientLog.warn('Executive summary request failed', {
+            error: summaryError instanceof Error ? summaryError.message : 'Unknown error',
+          });
+          showToast('Could not generate AI summary. Exporting report without summary.', 'warning');
+        }
+        setExportPhase('pdf');
+      }
+
       const exportData = {
         projectName,
         generatedAt: new Date(),
@@ -45,6 +87,7 @@ export function StatusReportExport({
         risks,
         decisions,
         milestones,
+        executiveSummary,
       };
 
       let blob: Blob;
@@ -72,6 +115,7 @@ export function StatusReportExport({
       showToast('Export failed. Please try again.', 'error');
     } finally {
       setIsExporting(null);
+      setExportPhase(null);
     }
   };
 
@@ -89,7 +133,13 @@ export function StatusReportExport({
         ) : (
           <Download className="h-4 w-4" />
         )}
-        <span>{isExporting ? 'Exporting...' : 'Export Report'}</span>
+        <span>
+          {isExporting
+            ? exportPhase === 'summary'
+              ? 'Generating AI Summary...'
+              : 'Creating PDF...'
+            : 'Export Report'}
+        </span>
         <ChevronDown className="h-4 w-4" />
       </button>
 
@@ -102,15 +152,18 @@ export function StatusReportExport({
           />
 
           {/* Dropdown menu */}
-          <div className="absolute right-0 top-full z-20 mt-2 w-48 rounded-lg border border-surface-200 bg-white py-1 shadow-lg">
+          <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-lg border border-surface-200 bg-white py-1 shadow-lg">
             <button
               onClick={() => handleExport('pdf')}
               className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-surface-700 transition-colors hover:bg-surface-50"
             >
               <FileText className="h-4 w-4 text-danger-500" />
               <div className="text-left">
-                <p className="font-medium">Export as PDF</p>
-                <p className="text-xs text-surface-500">Printable format</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="font-medium">Export as PDF</p>
+                  <Sparkles className="h-3.5 w-3.5 text-primary-500" />
+                </div>
+                <p className="text-xs text-surface-500">With AI executive summary</p>
               </div>
             </button>
             <button

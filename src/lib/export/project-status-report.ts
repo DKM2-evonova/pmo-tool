@@ -12,6 +12,7 @@ export interface ProjectStatusExportData {
   actionItems: ActionItemWithOwner[];
   risks: RiskWithOwner[];
   decisions: DecisionWithMaker[];
+  executiveSummary?: string;
 }
 
 // Helper functions
@@ -133,6 +134,37 @@ export async function generateProjectStatusPDF(
   pdf.text(`Open Risks: ${data.risks.length}`, margin + 60, yPosition + 5);
   pdf.text(`Key Decisions: ${data.decisions.length}`, margin + 110, yPosition + 5);
   yPosition += 20;
+
+  // =====================
+  // EXECUTIVE SUMMARY (if provided)
+  // =====================
+  if (data.executiveSummary) {
+    // Section header (matches other sections)
+    checkPageBreak(25);
+    pdf.setFillColor(79, 70, 229); // Primary color
+    pdf.rect(margin, yPosition - 5, contentWidth, 10, 'F');
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFontSize(12);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Executive Summary', margin + 3, yPosition + 1);
+    pdf.setTextColor(0, 0, 0);
+    yPosition += 12;
+
+    // Summary content - simple text without background
+    pdf.setFontSize(9);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(55, 65, 81); // surface-700
+
+    const summaryLines = pdf.splitTextToSize(data.executiveSummary, contentWidth - 4);
+
+    summaryLines.forEach((line: string) => {
+      checkPageBreak(lineHeight);
+      pdf.text(line, margin + 2, yPosition);
+      yPosition += lineHeight;
+    });
+
+    yPosition += 10;
+  }
 
   // =====================
   // SECTION 1: ACTION ITEMS
