@@ -62,14 +62,20 @@ export default async function ActionItemPage({ params }: ActionItemPageProps) {
         email: m.profile.email,
       })) || [];
 
-  // Parse updates
+  // Handle updates - JSONB columns are returned as JavaScript objects by Supabase
   let updatesArray: StatusUpdate[] = [];
-  try {
-    const parsed = actionItem.updates ? JSON.parse(actionItem.updates as string) : [];
-    updatesArray = Array.isArray(parsed) ? parsed : [];
-  } catch (e) {
-    loggers.api.warn('Failed to parse updates JSON', { error: e instanceof Error ? e.message : 'Unknown error' });
-    updatesArray = [];
+  if (Array.isArray(actionItem.updates)) {
+    // JSONB is already parsed by Supabase
+    updatesArray = actionItem.updates;
+  } else if (typeof actionItem.updates === 'string' && actionItem.updates) {
+    // Fallback for legacy string data
+    try {
+      const parsed = JSON.parse(actionItem.updates);
+      updatesArray = Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      loggers.api.warn('Failed to parse updates JSON', { error: e instanceof Error ? e.message : 'Unknown error' });
+      updatesArray = [];
+    }
   }
 
   const actionItemWithUpdates = {

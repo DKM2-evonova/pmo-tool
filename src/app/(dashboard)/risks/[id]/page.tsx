@@ -62,14 +62,20 @@ export default async function RiskPage({ params }: RiskPageProps) {
         email: m.profile.email,
       })) || [];
 
-  // Parse updates
+  // Handle updates - JSONB columns are returned as JavaScript objects by Supabase
   let updatesArray: StatusUpdate[] = [];
-  try {
-    const parsed = risk.updates ? JSON.parse(risk.updates as string) : [];
-    updatesArray = Array.isArray(parsed) ? parsed : [];
-  } catch (e) {
-    loggers.api.warn('Failed to parse updates JSON', { error: e instanceof Error ? e.message : 'Unknown error' });
-    updatesArray = [];
+  if (Array.isArray(risk.updates)) {
+    // JSONB is already parsed by Supabase
+    updatesArray = risk.updates;
+  } else if (typeof risk.updates === 'string' && risk.updates) {
+    // Fallback for legacy string data
+    try {
+      const parsed = JSON.parse(risk.updates);
+      updatesArray = Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      loggers.api.warn('Failed to parse updates JSON', { error: e instanceof Error ? e.message : 'Unknown error' });
+      updatesArray = [];
+    }
   }
 
   const riskWithUpdates = {
