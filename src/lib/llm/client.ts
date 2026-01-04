@@ -3,6 +3,11 @@
  * Supports Gemini 3 Pro Preview (primary), GPT-5.2 (fallback), and Gemini 2.0 Flash (utility)
  *
  * Updated December 2025 to use @google/genai SDK
+ *
+ * Model names are configurable via environment variables:
+ * - LLM_PRIMARY_MODEL: Primary Gemini model (default: gemini-3-pro-preview)
+ * - LLM_FALLBACK_MODEL: Fallback OpenAI model (default: gpt-5.2)
+ * - LLM_UTILITY_MODEL: Utility model for JSON repair (default: gemini-2.0-flash)
  */
 
 import { GoogleGenAI } from '@google/genai';
@@ -11,7 +16,14 @@ import { loggers } from '@/lib/logger';
 
 const log = loggers.llm;
 
-export type LLMModel = 'gemini-3-pro-preview' | 'gpt-5.2' | 'gemini-2.0-flash';
+// Model configuration with environment variable overrides
+const LLM_MODELS = {
+  primary: process.env.LLM_PRIMARY_MODEL || 'gemini-3-pro-preview',
+  fallback: process.env.LLM_FALLBACK_MODEL || 'gpt-5.2',
+  utility: process.env.LLM_UTILITY_MODEL || 'gemini-2.0-flash',
+} as const;
+
+export type LLMModel = string;
 
 /**
  * LLM Generation Settings
@@ -89,11 +101,11 @@ export class LLMClient {
       hasOpenAI: !!this.openai,
     });
 
-    // Try Gemini 3 Pro first
+    // Try primary Gemini model first
     try {
       if (this.gemini) {
         log.debug('Attempting Gemini generation', {
-          model: 'gemini-3-pro-preview',
+          model: LLM_MODELS.primary,
           maxOutputTokens: LLM_SETTINGS.gemini.maxOutputTokens,
           temperature: LLM_SETTINGS.gemini.temperature,
           jsonMode,
@@ -102,7 +114,7 @@ export class LLMClient {
         const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
 
         const response = await this.gemini.models.generateContent({
-          model: 'gemini-3-pro-preview',
+          model: LLM_MODELS.primary,
           contents: fullPrompt,
           config: {
             maxOutputTokens: LLM_SETTINGS.gemini.maxOutputTokens,
@@ -117,7 +129,7 @@ export class LLMClient {
         const latencyMs = Date.now() - startTime;
 
         log.info('Gemini generation successful', {
-          model: 'gemini-3-pro-preview',
+          model: LLM_MODELS.primary,
           inputChars: totalInputChars,
           outputChars: text.length,
           latencyMs,
@@ -126,7 +138,7 @@ export class LLMClient {
 
         return {
           content: text,
-          model: 'gemini-3-pro-preview',
+          model: LLM_MODELS.primary,
           isFallback: false,
           latencyMs,
         };
@@ -134,18 +146,18 @@ export class LLMClient {
     } catch (error) {
       const latencyMs = Date.now() - startTime;
       log.warn('Gemini generation failed, attempting fallback', {
-        model: 'gemini-3-pro-preview',
+        model: LLM_MODELS.primary,
         latencyMs,
         error: error instanceof Error ? error.message : 'Unknown error',
         errorName: error instanceof Error ? error.name : undefined,
       });
     }
 
-    // Fallback to GPT-5.2
+    // Fallback to OpenAI model
     try {
       if (this.openai) {
         log.debug('Attempting OpenAI fallback', {
-          model: 'gpt-5.2',
+          model: LLM_MODELS.fallback,
           maxTokens: LLM_SETTINGS.openai.maxTokens,
           temperature: LLM_SETTINGS.openai.temperature,
         });
@@ -157,7 +169,7 @@ export class LLMClient {
         messages.push({ role: 'user', content: prompt });
 
         const response = await this.openai.chat.completions.create({
-          model: 'gpt-5.2',
+          model: LLM_MODELS.fallback,
           messages,
           temperature: LLM_SETTINGS.openai.temperature,
           max_tokens: LLM_SETTINGS.openai.maxTokens,
@@ -168,7 +180,7 @@ export class LLMClient {
         const latencyMs = Date.now() - startTime;
 
         log.info('OpenAI fallback successful', {
-          model: 'gpt-5.2',
+          model: LLM_MODELS.fallback,
           inputChars: totalInputChars,
           outputChars: content.length,
           latencyMs,
@@ -178,7 +190,7 @@ export class LLMClient {
 
         return {
           content,
-          model: 'gpt-5.2',
+          model: LLM_MODELS.fallback,
           isFallback: true,
           latencyMs,
         };
@@ -278,7 +290,7 @@ CORRECTED JSON:`;
     if (this.gemini) {
       try {
         const response = await this.gemini.models.generateContent({
-          model: 'gemini-2.0-flash',
+          model: LLM_MODELS.utility,
           contents: prompt,
           config: {
             maxOutputTokens: LLM_SETTINGS.geminiFlash.maxOutputTokens,
@@ -327,7 +339,7 @@ CORRECTED JSON:`;
 
         return {
           content,
-          model: 'gemini-2.0-flash',
+          model: LLM_MODELS.utility,
           isFallback: false,
           latencyMs,
         };
