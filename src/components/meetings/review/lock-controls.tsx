@@ -1,7 +1,8 @@
 'use client';
 
 import { Button } from '@/components/ui';
-import { Lock, Unlock } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
+import { Lock, Unlock, HelpCircle } from 'lucide-react';
 import type { Profile } from '@/types/database';
 
 interface LockBannerProps {
@@ -56,42 +57,72 @@ export function LockControls({
   onPublish,
 }: LockControlsProps) {
   return (
-    <div className="card flex items-center justify-between">
-      <div className="flex items-center gap-3">
-        {hasLock ? (
-          <>
-            <Lock className="h-5 w-5 text-success-500" />
-            <span className="text-sm text-surface-600">
-              You are reviewing this meeting
-            </span>
-          </>
-        ) : (
-          <>
-            <Unlock className="h-5 w-5 text-surface-400" />
-            <span className="text-sm text-surface-600">
-              Click to start reviewing
-            </span>
-          </>
-        )}
+    <div className="card space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {hasLock ? (
+            <>
+              <Lock className="h-5 w-5 text-success-500" />
+              <span className="text-sm text-surface-600">
+                You are reviewing this meeting
+              </span>
+            </>
+          ) : (
+            <>
+              <Unlock className="h-5 w-5 text-surface-400" />
+              <span className="text-sm text-surface-600">
+                Click to start reviewing
+              </span>
+            </>
+          )}
+        </div>
+        <div className="flex gap-2">
+          {hasLock ? (
+            <>
+              <Tooltip
+                content="Stop reviewing without saving changes. This allows others to review instead."
+                position="bottom"
+              >
+                <Button variant="secondary" onClick={onReleaseLock}>
+                  <Unlock className="h-4 w-4" />
+                  Release Lock
+                </Button>
+              </Tooltip>
+              <Tooltip
+                content="Save all accepted items to the project and complete the review."
+                position="bottom"
+              >
+                <Button
+                  onClick={onPublish}
+                  isLoading={isPublishing}
+                  disabled={!canPublish}
+                >
+                  Publish Changes
+                </Button>
+              </Tooltip>
+            </>
+          ) : (
+            <Button onClick={onAcquireLock}>Start Review</Button>
+          )}
+        </div>
       </div>
-      <div className="flex gap-2">
-        {hasLock ? (
-          <>
-            <Button variant="secondary" onClick={onReleaseLock}>
-              Release Lock
-            </Button>
-            <Button
-              onClick={onPublish}
-              isLoading={isPublishing}
-              disabled={!canPublish}
-            >
-              Publish Changes
-            </Button>
-          </>
-        ) : (
-          <Button onClick={onAcquireLock}>Start Review</Button>
-        )}
-      </div>
+
+      {/* Helper text explaining actions */}
+      {hasLock && (
+        <div className="flex items-start gap-2 rounded-lg bg-surface-50 p-3 text-xs text-surface-600">
+          <HelpCircle className="h-4 w-4 flex-shrink-0 text-surface-400 mt-0.5" />
+          <div className="space-y-1">
+            <p>
+              <span className="font-medium text-surface-700">Release Lock:</span>{' '}
+              Exit the review without publishing. Your edits won&apos;t be saved, but another team member can take over.
+            </p>
+            <p>
+              <span className="font-medium text-surface-700">Publish Changes:</span>{' '}
+              Finalize the review and add all accepted action items, decisions, and risks to the project.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
