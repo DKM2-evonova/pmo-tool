@@ -188,6 +188,7 @@ All notable changes to the PMO Tool are documented here.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 1.3.0 | Dec 25, 2025 | Milestone overhaul (Gantt, dependencies, Excel import/export) |
 | 1.2.2 | Dec 25, 2025 | Action Item update detection, enhanced review UI |
 | 1.2.1 | Dec 24, 2025 | Meeting type selector UI improvements |
 | 1.2.0 | Dec 24, 2025 | Decision Log overhaul (Smart IDs, categories, faceted filters) |
