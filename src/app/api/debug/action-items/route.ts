@@ -25,13 +25,18 @@ export async function GET(request: Request) {
     }
 
     // Check if user is admin - this debug route exposes sensitive data
-    const { data: adminCheck } = await supabase
+    const { data: adminCheck, error: profileError } = await supabase
       .from('profiles')
       .select('global_role')
       .eq('id', user.id)
       .single();
 
-    if (adminCheck?.global_role !== 'admin') {
+    if (profileError || !adminCheck) {
+      console.error('Failed to fetch user profile', { userId: user.id, error: profileError?.message });
+      return NextResponse.json({ error: 'Failed to verify user permissions' }, { status: 500 });
+    }
+
+    if (adminCheck.global_role !== 'admin') {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
 

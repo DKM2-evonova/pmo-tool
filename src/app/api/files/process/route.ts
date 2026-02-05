@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { processFile } from '@/lib/file-processing';
 import { createClient } from '@/lib/supabase/server';
 import { loggers } from '@/lib/logger';
+import { FILE_MAX_SIZE_BYTES } from '@/lib/config';
 
 const log = loggers.file;
 
@@ -25,6 +26,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'No file provided' },
         { status: 400 }
+      );
+    }
+
+    // Validate file size against configured maximum
+    if (file.size > FILE_MAX_SIZE_BYTES) {
+      const maxSizeMB = Math.round(FILE_MAX_SIZE_BYTES / (1024 * 1024));
+      log.warn('File size exceeds maximum', {
+        fileName: file.name,
+        fileSize: file.size,
+        maxSize: FILE_MAX_SIZE_BYTES,
+      });
+      return NextResponse.json(
+        { error: `File size exceeds the maximum limit of ${maxSizeMB}MB. Please upload a smaller file or paste the text directly.` },
+        { status: 413 }
       );
     }
 
