@@ -20,13 +20,18 @@ export async function POST() {
     }
 
     // Admin authorization check
-    const { data: profile } = await userSupabase
+    const { data: profile, error: profileError } = await userSupabase
       .from('profiles')
       .select('global_role')
       .eq('id', user.id)
       .single();
 
-    if (profile?.global_role !== 'admin') {
+    if (profileError || !profile) {
+      log.error('Failed to fetch user profile', { userId: user.id, error: profileError?.message });
+      return NextResponse.json({ error: 'Failed to verify user permissions' }, { status: 500 });
+    }
+
+    if (profile.global_role !== 'admin') {
       log.warn('Non-admin attempted to access debug seed route', { userId: user.id });
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
@@ -41,7 +46,7 @@ export async function POST() {
     const testActionItemId = '770e8400-e29b-41d4-a716-446655440002';
 
     // Insert test profile (this should work)
-    const { error: profileError } = await supabase
+    const { error: testProfileError } = await supabase
       .from('profiles')
       .upsert({
         id: testUserId,
@@ -91,7 +96,7 @@ export async function POST() {
     return NextResponse.json({
       success: true,
       errors: {
-        profile: profileError?.message,
+        profile: testProfileError?.message,
         project: projectError?.message,
         member: memberError?.message,
         actionItem: actionItemError?.message

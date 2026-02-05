@@ -6,6 +6,39 @@ import crypto from 'crypto';
 
 const log = loggers.drive;
 
+// Timeout for webhook processing (Google requires response within 10 seconds)
+// We use 8 seconds to give buffer for response
+const WEBHOOK_PROCESSING_TIMEOUT_MS = 8000;
+
+/**
+ * Wraps an async operation with a timeout
+ * Returns the result if completed in time, or a timeout indicator
+ */
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number
+): Promise<{ result: T; timedOut: false } | { result: null; timedOut: true }> {
+  let timeoutId: NodeJS.Timeout;
+
+  const timeoutPromise = new Promise<{ result: null; timedOut: true }>((resolve) => {
+    timeoutId = setTimeout(() => {
+      resolve({ result: null, timedOut: true });
+    }, timeoutMs);
+  });
+
+  try {
+    const result = await Promise.race([
+      promise.then((r) => ({ result: r, timedOut: false as const })),
+      timeoutPromise,
+    ]);
+    clearTimeout(timeoutId!);
+    return result;
+  } catch (error) {
+    clearTimeout(timeoutId!);
+    throw error;
+  }
+}
+
 /**
  * Verify the channel token from the webhook
  */
@@ -121,66 +154,87 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ status: 'no_folder' });
       }
 
-      // Trigger sync for this folder
-      // Note: This is async but we return immediately to meet webhook response time requirements
-      // We track the processing result in the database for visibility and potential retry
-      processWebhookChange(channel.user_id, folder.id)
-        .then(async (result) => {
-          log.info('Webhook sync completed', {
-            channelId,
-            folderId: folder.id,
-            processed: result.processed,
-            skipped: result.skipped,
-            failed: result.failed,
-            errors: result.errors.length > 0 ? result.errors : undefined,
-          });
-
-          // Update channel with last successful sync info
-          try {
-            await supabase
-              .from('drive_webhook_channels')
-              .update({
-                last_sync_at: new Date().toISOString(),
-                last_sync_status: result.failed > 0 ? 'partial' : 'success',
-                last_sync_processed: result.processed,
-                last_sync_failed: result.failed,
-              })
-              .eq('id', channel.id);
-          } catch (updateError) {
-            log.warn('Failed to update channel sync status', {
-              channelId,
-              error: updateError instanceof Error ? updateError.message : 'Unknown error',
-            });
-          }
+      // Mark as processing before starting
+      await supabase
+        .from('drive_webhook_channels')
+        .update({
+          last_sync_at: new Date().toISOString(),
+          last_sync_status: 'processing',
         })
-        .catch(async (error) => {
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          log.error('Webhook sync failed', {
+        .eq('id', channel.id);
+
+      // Process with timeout to ensure we respond to Google in time
+      // If processing takes too long, we return and let it continue in background
+      // The cron job will handle any incomplete syncs
+      try {
+        const processResult = await withTimeout(
+          processWebhookChange(channel.user_id, folder.id),
+          WEBHOOK_PROCESSING_TIMEOUT_MS
+        );
+
+        if (processResult.timedOut) {
+          // Processing is still running in background, but we need to respond
+          log.warn('Webhook processing timed out, continuing in background', {
             channelId,
             folderId: folder.id,
-            error: errorMessage,
-            stack: error instanceof Error ? error.stack : undefined,
+            timeoutMs: WEBHOOK_PROCESSING_TIMEOUT_MS,
           });
 
-          // Track the failure in the database for potential retry
-          try {
-            await supabase
-              .from('drive_webhook_channels')
-              .update({
-                last_sync_at: new Date().toISOString(),
-                last_sync_status: 'failed',
-                last_sync_error: errorMessage,
-              })
-              .eq('id', channel.id);
-          } catch (updateError) {
-            log.warn('Failed to update channel error status', {
-              channelId,
-              error: updateError instanceof Error ? updateError.message : 'Unknown error',
-            });
-          }
+          // Note: The processing promise is still running and will update the DB when done
+          // We track this as 'processing' status - the cron job can retry if needed
+          return NextResponse.json({ status: 'processing_timeout' });
+        }
+
+        const result = processResult.result;
+        log.info('Webhook sync completed', {
+          channelId,
+          folderId: folder.id,
+          processed: result.processed,
+          skipped: result.skipped,
+          failed: result.failed,
+          errors: result.errors.length > 0 ? result.errors : undefined,
         });
 
-      return NextResponse.json({ status: 'processing' });
+        // Update channel with sync result
+        await supabase
+          .from('drive_webhook_channels')
+          .update({
+            last_sync_at: new Date().toISOString(),
+            last_sync_status: result.failed > 0 ? 'partial' : 'success',
+            last_sync_processed: result.processed,
+            last_sync_failed: result.failed,
+            last_sync_error: null,
+          })
+          .eq('id', channel.id);
+
+        return NextResponse.json({
+          status: 'completed',
+          processed: result.processed,
+          skipped: result.skipped,
+          failed: result.failed,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        log.error('Webhook sync failed', {
+          channelId,
+          folderId: folder.id,
+          error: errorMessage,
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+
+        // Track the failure in the database for potential retry by cron
+        await supabase
+          .from('drive_webhook_channels')
+          .update({
+            last_sync_at: new Date().toISOString(),
+            last_sync_status: 'failed',
+            last_sync_error: errorMessage,
+          })
+          .eq('id', channel.id);
+
+        // Still return 200 to prevent Google from retrying (we'll retry via cron)
+        return NextResponse.json({ status: 'failed', error: errorMessage });
+      }
     }
 
     // Other states: add, remove, update, trash, untrash

@@ -20,13 +20,18 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('global_role')
       .eq('id', user.id)
       .single();
 
-    if (profile?.global_role !== 'admin') {
+    if (profileError || !profile) {
+      log.error('Failed to fetch user profile', { userId: user.id, error: profileError?.message });
+      return NextResponse.json({ error: 'Failed to verify user permissions' }, { status: 500 });
+    }
+
+    if (profile.global_role !== 'admin') {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
 

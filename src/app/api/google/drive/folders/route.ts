@@ -199,9 +199,13 @@ export async function POST(request: NextRequest) {
 
 /**
  * Generate a channel token for webhook verification
+ * @throws Error if WEBHOOK_SECRET is not configured
  */
 function generateChannelToken(userId: string, channelId: string): string {
-  const secret = process.env.WEBHOOK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'default-secret';
+  const secret = process.env.WEBHOOK_SECRET;
+  if (!secret) {
+    throw new Error('WEBHOOK_SECRET environment variable is required for webhook token generation');
+  }
   return crypto
     .createHmac('sha256', secret)
     .update(`${userId}:${channelId}`)

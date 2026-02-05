@@ -22,6 +22,22 @@ import type {
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
 const log = loggers.drive;
 
+/**
+ * Escape a string for use in Google Drive Query Language
+ * Drive API uses a SQL-like query language where certain characters must be escaped
+ *
+ * According to Google Drive API docs, the query value must:
+ * - Be surrounded by single quotes
+ * - Have single quotes within the value escaped with backslash
+ * - Have backslashes escaped with another backslash
+ *
+ * @see https://developers.google.com/drive/api/guides/search-files
+ */
+function escapeDriveQueryValue(value: string): string {
+  // First escape backslashes, then escape single quotes
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
 // MIME types we consider as potential transcripts
 const SUPPORTED_MIME_TYPES = [
   'application/vnd.google-apps.document', // Google Docs
@@ -68,7 +84,8 @@ export async function listFolders(
   // Build query to find folders
   let query = "mimeType = 'application/vnd.google-apps.folder' and trashed = false";
   if (searchQuery) {
-    query += ` and name contains '${searchQuery.replace(/'/g, "\\'")}'`;
+    // Properly escape the search query to prevent query injection
+    query += ` and name contains '${escapeDriveQueryValue(searchQuery)}'`;
   }
 
   const params = new URLSearchParams({

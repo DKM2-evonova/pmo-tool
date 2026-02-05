@@ -7,13 +7,22 @@ import { cookies } from 'next/headers';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
 
-// Service key should never have a placeholder in production
+// Service key should never have a placeholder - always require it at runtime
 function getServiceKey(): string {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!key && process.env.NODE_ENV === 'production') {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY is required in production');
+  if (!key) {
+    // In production, always throw
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('SUPABASE_SERVICE_ROLE_KEY is required in production');
+    }
+    // In development, also throw but with a more helpful message
+    throw new Error(
+      'SUPABASE_SERVICE_ROLE_KEY is not set. ' +
+      'Please set this environment variable in your .env.local file. ' +
+      'You can find it in your Supabase project settings under API.'
+    );
   }
-  return key || 'placeholder-service-key';
+  return key;
 }
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };

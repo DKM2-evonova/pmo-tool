@@ -43,19 +43,32 @@ export async function POST(
       .eq('user_id', user.id)
       .single();
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('global_role')
       .eq('id', user.id)
       .single();
 
-    if (!membership && profile?.global_role !== 'admin') {
-      log.warn('Unauthorized process attempt', {
-        userId: user.id,
-        meetingId,
-        projectId: meeting.project_id,
-      });
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    // If profile fetch fails but user has membership, allow access
+    // Only block if both membership and profile check fail
+    if (!membership) {
+      if (profileError || !profile) {
+        log.warn('Unauthorized process attempt - no membership and profile fetch failed', {
+          userId: user.id,
+          meetingId,
+          projectId: meeting.project_id,
+          profileError: profileError?.message,
+        });
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      if (profile.global_role !== 'admin') {
+        log.warn('Unauthorized process attempt', {
+          userId: user.id,
+          meetingId,
+          projectId: meeting.project_id,
+        });
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
     }
 
     if (meeting.status === 'Deleted') {
